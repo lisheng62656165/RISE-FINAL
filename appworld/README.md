@@ -6,24 +6,26 @@ algorithm is the same RISE pipeline described in the root README. The package
 also includes the comparison baselines Vanilla and the modified official
 OAgents parallel Best-of-4.
 
-The AppWorld bundle, wheel, dependency wheels, runner, selector, evaluator,
-and tests are included here. You need Python 3.12, an OpenAI-compatible model
-endpoint, and your own API key. No API key, private endpoint, server path,
-old experiment output, or author metadata is included.
+The runner, selector, evaluator, tests, and pinned asset manifest are included
+here. `bootstrap.py` downloads the official encrypted AppWorld bundle and
+package wheel, verifies them, and installs pinned dependencies. You need
+Python 3.12, setup-time network access, an OpenAI-compatible model endpoint,
+and your own API key. No API key, private endpoint, server path, old experiment
+output, or author metadata is included.
 
 ## Codex run instruction
 
 Read this file and `AGENTS.md`, then work only in this directory. Use the
-bundled data and wheel; do not clone another project or download another
-dataset. Run the offline checks and a one-task smoke run before the full
-comparison. Use a fresh output directory, resume the same directory after an
-interruption, and run `summarize.py` after scoring. A partial run is not a
-complete benchmark.
+included downloader and official asset sources; do not clone another project.
+Run the checks and a one-task smoke run before the full comparison. Use a fresh
+output directory, resume the same directory after an interruption, and run
+`summarize.py` after scoring. A partial run is not a complete benchmark.
 
 ## Setup
 
 The validated target is Linux/WSL2 x86_64 with Python 3.12. The bootstrap
-script installs the included AppWorld wheel and Linux wheels into `.venv`.
+script downloads the two official assets and installs pinned packages into
+`.venv`.
 
 ```bash
 python3.12 bootstrap.py
@@ -31,9 +33,8 @@ python3.12 bootstrap.py
 .venv/bin/python scripts/smoke_environment.py
 ```
 
-The package can also use an existing Python 3.12 environment with
-`requirements.txt`; the bundled wheel and data remain the preferred
-reproducible path.
+The package can also use an existing Python 3.12 environment. Run
+`python download_assets.py` before installing `requirements.txt`.
 
 ## Model configuration
 

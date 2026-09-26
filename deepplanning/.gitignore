@@ -1,9 +1,15 @@
 __pycache__/
 *.py[cod]
 .venv/
+.asset-cache/
 .env
 *.key
 *.secret
 results/
 logs/
 *.log
+shoppingplanning/database_level1/
+shoppingplanning/database_level2/
+shoppingplanning/database_level3/
+travelplanning/database/database_zh/
+travelplanning/database/database_en/

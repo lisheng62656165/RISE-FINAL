@@ -1,8 +1,9 @@
 # RISE on DeepPlanning
 
 This directory contains the DeepPlanning Travel and Shopping adapter used in
-the paper. The benchmark data, local tool databases, official evaluators,
-agent code, RISE implementation, and Best-of-4 selector are included. The
+the paper. Official evaluators, agent code, the RISE implementation, and the
+Best-of-4 selector are included. Large local tool databases are downloaded
+from the official `Qwen/DeepPlanning` release by `download_assets.py`. The
 legacy output key `statetrace_dsr` is retained by the evaluator for script
 compatibility; it refers to this RISE adapter, not to a separate paper method.
 
@@ -15,14 +16,17 @@ created in this release.
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe download_assets.py
 $env:DEEPSEEK_API_KEY = "YOUR_API_KEY"
 $env:DEEPPLANNING_OPENAI_BASE_URL = "https://api.deepseek.com/v1"
 .\.venv\Scripts\python.exe verify_release.py
 ```
 
 Use any OpenAI-compatible model by setting the model and endpoint options used
-by the runner. Never commit a key. The included data and local databases mean
-that a separate benchmark download is not needed for the packaged cohort.
+by the runner. Never commit a key. The downloader retrieves five pinned
+official archives (about 100 MiB compressed), verifies their sizes and
+SHA-256 values, and installs the complete 120 Shopping and 120+120 Travel
+cohorts. Re-running it skips complete assets.
 
 ## Methods
 

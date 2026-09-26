@@ -1,9 +1,9 @@
-"""运行 StateTrace-EDS-ECA 的 StateBench 正式实现。
+"""Run the paper-aligned StateTrace-EDS-ECA StateBench pipeline.
 
-Vanilla A 是唯一初始轨迹。每轮从 accepted incumbent 的公开事件 frontier 在
-fresh environment 中生成一个 proposal；存在 material disagreement 时，list-wise
-selector 二选一；程序再从公开事件差异生成 ECA 信用，指导下一轮。最终输出可能
-来自 A/B'/C'/D'，而不是强制输出最后一条 proposal。
+Vanilla A is the only initial trajectory. Each round generates a proposal in a
+fresh environment from the incumbent's public frontier. A list-wise selector is
+used only when the public traces materially disagree, and event credit guides
+the next round. The final result may come from any accepted round.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def bundled_benchmark_root() -> Path:
 
 
 def validate_anchor(row: Mapping[str, Any], anchor_kind: str = "vanilla") -> None:
-    """确保初始 A 是原始 Vanilla，而非历史 selector 或其他方法的输出。"""
+    """Require the initial anchor to be an unmodified Vanilla trajectory."""
     if anchor_kind != "vanilla":
         raise ValueError("StateTrace-EDS-ECA only supports a Vanilla anchor")
     if row.get("inference_policy") != "vanilla" or row.get("state_trace_arc_selected_source") is not None:
@@ -52,7 +52,7 @@ def validate_anchor(row: Mapping[str, Any], anchor_kind: str = "vanilla") -> Non
 
 
 def build_selector_packet(candidates: list[Mapping[str, Any]], schemas: Any, order: list[int]) -> dict[str, Any]:
-    """构造随机顺序、仅含公开轨迹和事件摘要的二选一 selector 输入。"""
+    """Build a randomly ordered selector packet from public trajectory views."""
     if sorted(order) != list(range(len(candidates))):
         raise ValueError("order must be a permutation of candidate indices")
     packet = build_public_packet(candidates, schemas, order)
@@ -62,7 +62,7 @@ def build_selector_packet(candidates: list[Mapping[str, Any]], schemas: Any, ord
 
 
 def parse_args() -> argparse.Namespace:
-    """解析正式算法所需参数；不暴露历史方法、gate 或 ablation 开关。"""
+    """Parse the reproducibility settings for the main StateBench run."""
     parser = argparse.ArgumentParser(description="Run paper-aligned StateTrace-EDS-ECA on StateBench")
     parser.add_argument("--statebench-root", type=Path, default=bundled_benchmark_root())
     parser.add_argument("--anchor-dir", type=Path, required=True)
@@ -81,7 +81,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def close_client(client: Any) -> None:
-    """关闭每个任务拥有的 HTTP transport，避免并发下积累半关闭连接。"""
+    """Close a task-local HTTP transport when the client exposes one."""
     transport = getattr(client, "_client", None)
     close = getattr(transport, "close", None)
     if close is not None:
@@ -89,7 +89,7 @@ def close_client(client: Any) -> None:
 
 
 def main() -> None:
-    """加载 Vanilla anchors，并发执行三轮生成、选择和事件信用更新。"""
+    """Load Vanilla anchors and run the three proposal rounds concurrently."""
     args = parse_args()
     if args.workers < 1:
         raise ValueError("--workers must be positive")
@@ -129,7 +129,7 @@ def main() -> None:
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     def generate_proposal(domain: Any, task: Any, system_prompt: str, injected: str, proposal_seed: int, metadata: Mapping[str, Any]) -> tuple[dict[str, Any], int]:
-        """在全新 StateBench 环境中生成一条完整 proposal 轨迹。"""
+        """Generate one complete proposal in a fresh StateBench environment."""
         env_data, _ = load_task_environment(domain, task)
         env = domain.environment_class(env_data.deep_copy(), now=task.now)
         client = ReliableMiMoClient.from_env()
@@ -157,7 +157,7 @@ def main() -> None:
         return row, int(getattr(agent.token_usage, "total_tokens", 0) or 0)
 
     def select_pair(domain: Any, system_prompt: str, candidates: list[Mapping[str, Any]], order: list[int], decision_seed: int) -> tuple[int, dict[str, Any], int]:
-        """调用模型做二选一；格式错误有界重试，耗尽后保留 proposal 等待续跑。"""
+        """Select one candidate with bounded retries for malformed responses."""
         packet = build_selector_packet(candidates, domain.tool_schemas, order)
         tool = listwise_selector_tool(2)
         client = ReliableMiMoClient.from_env()
@@ -187,7 +187,7 @@ def main() -> None:
         return selected, details, int(getattr(selector.token_usage, "total_tokens", 0) or 0)
 
     def run_one(domain_name: str, task_id: str) -> dict[str, Any]:
-        """对一个 task 执行 A→B′→C′→D′，并持续维护 accepted incumbent。"""
+        """Run A -> B' -> C' -> D' while retaining the accepted incumbent."""
         key = f"statebench::{domain_name}::{task_id}"
         output_path = args.output_dir / f"{domain_name}__{task_id}.json"
         if output_path.exists():

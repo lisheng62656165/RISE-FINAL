@@ -1,12 +1,14 @@
 # DeepPlanning Travel Adapter
 
-The Travel adapter is run from `deepplanning/`. Its local databases and task
-files are already part of this release. Do not use the historical download or
-shell-launcher instructions from older copies of the benchmark.
+The Travel adapter is run from `deepplanning/`. Task files are included; the
+large English and Chinese databases are installed from the pinned official
+release by the parent `download_assets.py`. Do not use historical shell
+launchers from older copies of the benchmark.
 
 From the parent directory:
 
 ```powershell
+python download_assets.py
 python run_deepplanning_travel_inference_only.py --help
 python run_deepplanning_eds_eca.py --help
 python select_best_of_4_deepplanning.py --help

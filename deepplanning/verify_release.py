@@ -1,4 +1,4 @@
-"""Check that the bundled benchmark has all three full test cohorts."""
+"""Check that all downloaded DeepPlanning cohorts are complete."""
 from pathlib import Path
 import argparse
 import json
@@ -18,7 +18,10 @@ def main() -> None:
     result = {"shopping_levels": levels, "shopping_total": sum(levels.values()), "travel": travel}
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if levels != {1: 50, 2: 50, 3: 20} or travel != {"zh": 120, "en": 120}:
-        raise SystemExit("release is incomplete")
+        raise SystemExit(
+            "DeepPlanning assets are missing or incomplete. "
+            "Run `python download_assets.py`, then retry this check."
+        )
 
 
 if __name__ == "__main__":

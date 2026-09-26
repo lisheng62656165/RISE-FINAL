@@ -1,12 +1,13 @@
-"""MIMO 瞬时传输错误的有界重试封装。
+"""Bounded retry wrapper for transient MIMO transport errors.
 
 Inference retries preserve the prompt, seed, task, and environment, but a
 provider may return different samples and charge for each request. Model errors are re-raised
 immediately so this wrapper cannot hide invalid tool decisions.
 
-本文件是 transport 基础设施，不参与 EDS-ECA 打分。它创建
-OpenAI-compatible client，处理瞬时失败，可按配置轮换 key，保留 seeded
-request，并提供 MiMoAgent 所需的 response/token 接口。
+This module is transport infrastructure and does not participate in EDS-ECA
+scoring. It creates OpenAI-compatible clients, handles transient failures, can
+rotate keys by configuration, preserves seeded requests, and exposes the
+response/token interface required by MiMoAgent.
 """
 
 from __future__ import annotations
@@ -33,7 +34,6 @@ TRANSIENT_EXCEPTION_NAMES = {
 }
 
 
-# 函数作用：识别适合重试的 MIMO 网络、限流和服务端瞬时错误。
 def is_transient_mimo_error(error: BaseException) -> bool:
     name = type(error).__name__
     if name in TRANSIENT_EXCEPTION_NAMES:
@@ -69,7 +69,6 @@ class ReliableMiMoClient(_MiMoClient):
     _key_lock = threading.Lock()
     _key_index = 0
 
-    # 函数作用：从环境变量构造带统一超时和重试配置的 MIMO 客户端。
     @classmethod
     def from_env(cls) -> "ReliableMiMoClient":
         """Build a client, optionally rotating across a secure API-key pool."""
@@ -100,7 +99,6 @@ class ReliableMiMoClient(_MiMoClient):
     retry_attempts = max(1, int(os.environ.get("MIMO_RETRY_ATTEMPTS", "3")))
     retry_backoff_seconds = float(os.environ.get("MIMO_RETRY_BACKOFF_SECONDS", "5"))
 
-    # 函数作用：保存客户端配置并初始化 OpenAI 兼容传输层。
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
         self._hard_timeout_seconds = float(
@@ -149,7 +147,6 @@ class ReliableMiMoClient(_MiMoClient):
                 (socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT,
                  int(min(timeout_seconds, 240.0) * 1000))
             )
-        # 函数作用：根据当前 endpoint 和 key 建立底层同步 API 客户端。
         def build_transport_client() -> OpenAI:
             return OpenAI(
                 api_key=kwargs["api_key"],
@@ -180,7 +177,6 @@ class ReliableMiMoClient(_MiMoClient):
         self._build_transport_client = build_transport_client
         self._client = build_transport_client()
 
-    # 函数作用：在瞬时错误上执行带退避的统一重试包装。
     def _retry(self, operation):
         last_error = None
         for attempt in range(self.retry_attempts):
@@ -194,7 +190,6 @@ class ReliableMiMoClient(_MiMoClient):
                     # retried without pinning the batch worker forever.
                     result_queue: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
 
-                    # 函数作用：调用一个操作并在认证问题时轮换可用 key 后重试。
                     def invoke() -> None:
                         try:
                             result_queue.put((True, operation()))
@@ -229,7 +224,6 @@ class ReliableMiMoClient(_MiMoClient):
                 time.sleep(delay)
         raise last_error  # pragma: no cover
 
-    # 函数作用：按 StateBench agent 所需接口生成带可选工具调用的回复。
     def generate(self, *, messages: list[dict[str, Any]], tools: list[dict[str, Any]]):
         if os.environ.get("MIMO_STREAMING", "0").lower() in {"1", "true", "yes", "on"}:
             return self._retry(
@@ -237,7 +231,6 @@ class ReliableMiMoClient(_MiMoClient):
             )
         return self._retry(lambda: self._generate_once(messages=messages, tools=tools))
 
-    # 函数作用：执行普通 chat completion，供 selector 和评分器使用。
     def complete_chat(
         self,
         messages: list[dict[str, str]],
@@ -264,7 +257,6 @@ class ReliableMiMoClient(_MiMoClient):
         if os.environ.get("MIMO_JSON_RESPONSE_FORMAT", "0").lower() in {"1", "true", "yes", "on"}:
             kwargs["response_format"] = {"type": "json_object"}
 
-        # 函数作用：向当前 provider 发起一次 OpenAI 兼容请求。
         def request() -> str:
             self._compatible_kwargs(kwargs)
             if os.environ.get("MIMO_STREAMING", "0").lower() in {"1", "true", "yes", "on"}:
@@ -282,7 +274,6 @@ class ReliableMiMoClient(_MiMoClient):
 
         return self._retry(request)
 
-    # 函数作用：生成特定服务商需要的额外请求字段。
     def _provider_extra_body(self) -> dict[str, Any] | None:
         nemotron_thinking = os.environ.get("MIMO_NEMOTRON_THINKING")
         if nemotron_thinking is not None:
@@ -309,7 +300,6 @@ class ReliableMiMoClient(_MiMoClient):
             kwargs['max_completion_tokens'] = kwargs.pop('max_tokens')
         return kwargs
 
-    # 函数作用：执行一次非流式 agent 生成并规范化返回格式。
     def _generate_once(self, *, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> Any:
         kwargs: dict[str, Any] = {
             "model": self.model, "messages": messages, "tools": tools,
@@ -332,7 +322,6 @@ class ReliableMiMoClient(_MiMoClient):
                                reasoning_content=getattr(message, "reasoning_content", None),
                                usage=getattr(response, "usage", None))
 
-    # 函数作用：执行流式生成并拼接文本、工具调用和 token 用量。
     def _generate_streaming(
         self, *, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> Any:

@@ -1,6 +1,6 @@
-"""APPWorld-specific public evidence adapter for StateTrace-EDS-ECA.
+"""AppWorld public-event adapter for StateTrace-EDS-ECA.
 
-The EDS-ECA controller remains dataset agnostic.  APPWorld needs a small
+The EDS-ECA controller remains dataset agnostic. AppWorld needs a small
 adapter because API documentation is verbose and a single ReAct code block
 may contain several API calls with one shared execution output.
 """
@@ -13,6 +13,8 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 import copy
+
+from .public_validation import reject_forbidden_fields
 
 
 _API_CALL_RE = re.compile(r"^apis\.([A-Za-z_]\w*)\.([A-Za-z_]\w*)$")
@@ -244,7 +246,7 @@ def appworld_selector_packet(
 ) -> dict[str, Any]:
     """Build a compact packet while retaining public evidence and event IDs."""
 
-    return {
+    packet = {
         "task_instruction": task_instruction,
         "candidate_A": {
             "summary": _trajectory_summary(left),
@@ -255,6 +257,8 @@ def appworld_selector_packet(
             "public_events": _focus_events(right),
         },
     }
+    reject_forbidden_fields(packet)
+    return packet
 
 
 def appworld_flat_selector_packet(
@@ -263,12 +267,14 @@ def appworld_flat_selector_packet(
     right: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
     """Expose chronological atomic events without hierarchy-level aggregates."""
-    return {
+    packet = {
         "task_instruction": task_instruction,
         "candidate_A": {"atomic_events": _focus_events(left)},
         "candidate_B": {"atomic_events": _focus_events(right)},
         "event_representation": "flat_atomic_events",
     }
+    reject_forbidden_fields(packet)
+    return packet
 
 
 def namespace_appworld_events(events: Sequence[Mapping[str, Any]], label: str) -> list[dict[str, Any]]:
@@ -324,7 +330,7 @@ def appworld_event_frontier(
             "issue_type": str(prior_credit.get("unresolved_issue_type")),
             "instruction": str((prior_credit.get("active_intervention") or {}).get("instruction") or "Re-ground the next action from public facts."),
         }
-    return {
+    frontier = {
         "schema_version": "appworld_state_trace_eds_eca_frontier_v1",
         "event_hierarchy": {
             "documentation": sum(e["is_api_documentation"] for e in structural),
@@ -346,6 +352,8 @@ def appworld_event_frontier(
         "outcome_used": False,
         "literal_replay": False,
     }
+    reject_forbidden_fields(frontier)
+    return frontier
 
 
 def appworld_atomic_frontier(
@@ -367,7 +375,7 @@ def appworld_atomic_frontier(
                 "result_shape": str(event.get("result_shape") or "unknown"),
             }
         )
-    return {
+    frontier = {
         "schema_version": "appworld_state_trace_flat_atomic_frontier_v1",
         "atomic_events": atomic_events,
         "event_credit_state": copy.deepcopy(dict(prior_credit or {})),
@@ -375,6 +383,8 @@ def appworld_atomic_frontier(
         "outcome_used": False,
         "literal_replay": False,
     }
+    reject_forbidden_fields(frontier)
+    return frontier
 
 
 def appworld_preserve_only_frontier(
@@ -398,7 +408,7 @@ def appworld_preserve_only_frontier(
                 "is_api_documentation": bool(event.get("is_api_documentation")),
             }
         )
-    return {
+    frontier = {
         "schema_version": "appworld_state_trace_preserve_only_frontier_v1",
         "event_hierarchy": {"successful_events": events[-36:]},
         "active_intervention": None,
@@ -412,6 +422,8 @@ def appworld_preserve_only_frontier(
         "outcome_used": False,
         "literal_replay": False,
     }
+    reject_forbidden_fields(frontier)
+    return frontier
 
 
 def appworld_rds_only_frontier(
@@ -445,7 +457,7 @@ def appworld_rds_only_frontier(
         }
     elif prior_credit and prior_credit.get("active_intervention"):
         active = copy.deepcopy(prior_credit["active_intervention"])
-    return {
+    frontier = {
         "schema_version": "appworld_state_trace_rds_only_frontier_v1",
         "event_hierarchy": {"recovery_risk_events": failures[-36:]},
         "active_intervention": active,
@@ -459,6 +471,8 @@ def appworld_rds_only_frontier(
         "outcome_used": False,
         "literal_replay": False,
     }
+    reject_forbidden_fields(frontier)
+    return frontier
 
 
 def appworld_public_disagreement(

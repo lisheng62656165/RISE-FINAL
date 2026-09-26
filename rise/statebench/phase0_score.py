@@ -1,10 +1,9 @@
-"""在 rollout 完成后离线评分，生成过程不接触 gold data。
+"""Score completed rollouts offline without exposing gold data to generation.
 
-本文件位于在线 StateTrace-EDS-ECA 调用图之外。
-在 A/B'/C'/D' 全部生成和选择结束后，脚本检查运行边界标记，为 worker/domain
-构造 task 和可选 UX judge，调用官方 score_one，检查指标是否完整写入并生成
-独立 summary。原始轨迹不会改写，评分不会反馈到事件分析、selector、信用或
-incumbent 更新。
+This module runs after all A/B'/C'/D' generation and selection. It validates
+the runtime boundary, invokes the official scorer and optional UX judge, and
+writes an independent summary. Scores are never fed back into event analysis,
+selection, credit, or incumbent updates.
 """
 
 from __future__ import annotations
@@ -34,7 +33,6 @@ def bundled_benchmark_root() -> Path:
     return Path(__file__).resolve().parent / "benchmark"
 
 
-# 函数作用：解析离线 MIMO 评分阶段的输入、输出和 UX 配置。
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--statebench-root", type=Path, default=bundled_benchmark_root())
@@ -50,7 +48,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# 函数作用：读取待评分目录中的原始任务轨迹并按任务键索引。
 def load_raw_trajectories(input_dir: Path) -> list[tuple[Path, dict[str, Any]]]:
     rows: list[tuple[Path, dict[str, Any]]] = []
     for path in sorted(input_dir.glob("*.json")):
@@ -62,7 +59,6 @@ def load_raw_trajectories(input_dir: Path) -> list[tuple[Path, dict[str, Any]]]:
     return rows
 
 
-# 函数作用：确认评分输入仍满足运行期公开信息边界。
 def validate_runtime_boundary(row: dict[str, Any], path: Path) -> None:
     domain = row.get("domain")
     if domain not in DOMAINS:
@@ -75,7 +71,6 @@ def validate_runtime_boundary(row: dict[str, Any], path: Path) -> None:
         raise ValueError(f"{path}: gold-field exposure was not explicitly disabled")
 
 
-# 函数作用：将单任务评分或汇总结果写入 JSON 文件。
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -83,7 +78,6 @@ def write_json(path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
-# 函数作用：判断已有评分文件是否缺少本次要求的完成度或 UX 字段。
 def missing_score_fields(path: Path, *, with_ux: bool, ux_only: bool = False) -> list[str]:
     if not path.exists():
         return ["score_file"]
@@ -92,7 +86,6 @@ def missing_score_fields(path: Path, *, with_ux: bool, ux_only: bool = False) ->
     return [field for field in fields if row.get(field) is None]
 
 
-# 函数作用：并发调度所有缺失的离线评分任务并生成汇总。
 def main() -> None:
     args = parse_args()
     if args.with_ux and args.ux_only:
@@ -109,15 +102,12 @@ def main() -> None:
     from state_bench.scoring import TaskRequirementsJudge, UXQualityJudge
     from state_bench.scripts.score import score_one
 
-    # 阶段 1：只读取已完成的 raw artifact，并检查元数据是否明确记录了
-    # 无泄漏运行边界。
     rows = load_raw_trajectories(args.input_dir)
     if not rows:
         raise ValueError('No trajectories to score')
     args.output_dir.mkdir(parents=True, exist_ok=True)
     thread_state = threading.local()
 
-    # 函数作用：根据 StateBench 领域构造对应的任务完成度评审器。
     def judges_for(domain_name: str) -> tuple[Any, Any, Any]:
         """Keep one key-pooled client per scoring worker thread."""
         if not hasattr(thread_state, "client"):
@@ -145,15 +135,12 @@ def main() -> None:
         return thread_state.client, task_judge, ux_judge
 
     results: list[dict[str, Any]] = []
-    # 阶段 2：并发评分。每个 worker 线程拥有自己的 API client，并缓存 domain
-    # judge；score 文件按任务保存，可断点续跑而不重复评分已完成轨迹。
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
         futures = {}
         task_roots = {
             domain_name: args.statebench_root / "state_bench" / "domains" / domain_name / "tasks"
             for domain_name in DOMAINS
         }
-        # 函数作用：对一条完整轨迹计算 Task Completion，并按配置补充 UX 评分。
         def score_row(input_path: Path, row: dict[str, Any], output_path: Path) -> dict[str, Any]:
             client, task_judge, ux_judge = judges_for(row["domain"])
             existing_scores = {}
@@ -221,8 +208,6 @@ def main() -> None:
             results.append(result)
             print(json.dumps(result, ensure_ascii=False, sort_keys=True), flush=True)
 
-    # 阶段 3：只记录运行完成情况。指标汇总和 Vanilla/方法 paired 统计由后续
-    # analysis 脚本完成，避免和单任务评分职责混在一起。
     summary = {
         "input_trajectories": len(rows),
         "scored": sum(row["status"] == "OK" for row in results),

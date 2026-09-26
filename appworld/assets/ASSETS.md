@@ -1,17 +1,15 @@
-# Bundled assets
+# Downloaded assets
 
-- `data-0.1.0.bundle`: official encrypted APPWorld dataset, downloaded from
-  https://s3.us-west-2.amazonaws.com/appworld.dev/data-0.1.0.bundle .
-- `appworld-0.1.3.post1-py3-none-any.whl`: official PyPI wheel; includes the
-  encrypted apps bundle. Do not replace with decrypted apps source.
-- `wheels-linux-py312/`: dependency wheels for Linux x86_64 / CPython 3.12.
-  Versions are recorded in `../requirements-linux-py312.txt`. Original license
-  notices are retained inside each wheel's dist-info directory. Each dependency
-  retains its own license, not the research-code license.
+- `data-0.1.0.bundle`: official encrypted AppWorld dataset.
+- `appworld-0.1.3.post1-py3-none-any.whl`: official PyPI wheel containing the
+  encrypted apps bundle.
 
-Keep these files when distributing the self-contained artifact. The wheels
-target modern glibc Linux (2.28 or newer), not Alpine/musl or ARM. The bundled
-bootstrap is validated only on Linux x86_64 / CPython 3.12 and deliberately
-refuses external dependency downloads on other platforms. Python/OS and API
-access are not bundled. The extracted protected data is local-only; see
-../NOTICE.md.
+`python download_assets.py` retrieves both files from their official public
+sources and verifies the byte count and SHA-256 recorded in `manifest.json`.
+They are intentionally ignored by Git. Dependency versions remain pinned in
+`../requirements-linux-py312.txt` and are installed from the configured Python
+package index by `bootstrap.py`.
+
+The bootstrap is validated on Linux x86_64 / CPython 3.12. Python, package
+index access, asset-host access, and model API access are not bundled. The
+extracted protected data is local-only; see `../NOTICE.md`.

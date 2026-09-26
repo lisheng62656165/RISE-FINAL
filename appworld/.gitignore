@@ -1,6 +1,9 @@
 .venv/
 runtime/
 outputs/
+assets/data-0.1.0.bundle
+assets/appworld-*.whl
+assets/wheels-linux-py312/
 .env
 *.key
 __pycache__/

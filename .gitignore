@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
+*.whl
 .pytest_cache/
 .venv/
 outputs/
@@ -12,3 +13,4 @@ api_*.txt
 .codex/
 .DS_Store
 ._.DS_Store
+dist/

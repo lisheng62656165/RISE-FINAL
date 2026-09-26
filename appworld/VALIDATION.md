@@ -7,15 +7,17 @@ Date: 2026-09-21. Platform: Linux x86_64, Python 3.12.
 - Copied the release artifact to a standalone directory outside the research
   repository. Created a new venv; no research packages were imported from the
   old venv (only its Python interpreter was used to create a new environment).
-- Installed APPWorld 0.1.3.post1 from the bundled wheel and all dependencies.
-- Repeated installation in a second standalone directory with `PIP_NO_INDEX=1`
-  and pip `--no-index --find-links assets/wheels-linux-py312`. All dependencies
-  were installed locally. No dataset/PyPI download was used for this second run.
-- Unpacked the official encrypted local data bundle: Test-N 168 task IDs and
-  Test-C 417 task IDs. No LFS pointer files or external data paths are needed.
+- Installed APPWorld 0.1.3.post1 from the pinned wheel and all dependencies.
+- The original release was also tested from its former offline wheel cache.
+  The lightweight release replaces that cache with pinned package-index
+  installation; this historical offline validation is not a claim that the
+  current Git checkout contains dependency wheels.
+- Unpacked the official encrypted data bundle: Test-N 168 task IDs and Test-C
+  417 task IDs. The lightweight release downloads and verifies this bundle
+  before unpacking it.
 - Ran a real AppWorld public API operation and `world.evaluate()` on one task
   from each split. Both environment/evaluator smoke tests passed.
-- `python -m pytest -q`: **15 passed**. Covers event compiler, hierarchy,
+- `python -m pytest -q`: **18 passed**. Covers event compiler, hierarchy,
   documentation/error distinction, event credit projection,
   selector evidence ownership, no hidden evaluation in selector inputs,
   binary Faithful selection, OpenAI reasoning request normalization, exact OAgents

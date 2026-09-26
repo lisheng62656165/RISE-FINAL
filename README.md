@@ -7,11 +7,13 @@ uses public event evidence to guide a fresh proposal, compares the accepted
 trajectory with that proposal, and keeps an accepted trajectory as the search
 state.
 
-The repository is self-contained at the benchmark level: task data,
-environment code, scoring code, prompts, and the released offline wheels are
-stored in the corresponding benchmark directory. A Python interpreter and a
-model API key are still required. No API key, private endpoint, server path,
-experiment output, or author metadata is included.
+The repository contains the benchmark adapters, task metadata, scoring code,
+prompts, and deterministic asset manifests. Large DeepPlanning databases and
+AppWorld binaries are fetched from their official public releases by the
+included downloaders; Python dependencies are installed from the configured
+package index. A Python interpreter, network access during setup, and a model
+API key are required. No API key, private endpoint, server path, experiment
+output, or author metadata is included.
 
 ## Method
 
@@ -141,6 +143,7 @@ official verifier labels are used only after generation for scoring.
 cd deepplanning
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe download_assets.py
 $env:DEEPSEEK_API_KEY = "YOUR_API_KEY"
 $env:DEEPPLANNING_OPENAI_BASE_URL = "https://api.deepseek.com/v1"
 .\.venv\Scripts\python.exe verify_release.py
@@ -174,3 +177,21 @@ account-anonymous by repository contents alone.
 
 See [`PAPER_ALIGNMENT.md`](PAPER_ALIGNMENT.md) for the paper-to-code map,
 historical naming policy, data boundaries, and result tables.
+See [`CODE_REVIEW.md`](CODE_REVIEW.md) for the reviewer-oriented implementation
+audit, residual reproduction caveats, and the release verification record.
+
+## Double-blind supplementary
+
+Do not submit or cite the account-identifying public GitHub URL during double-
+blind review. Build a clean archive without Git history, hosting metadata,
+downloaded databases, wheels, credentials, caches, or run outputs:
+
+```powershell
+python tools/build_anonymous_supplement.py `
+  --output ..\RISE-anonymous-supplementary.zip
+```
+
+The archive retains source, tests, configs, manifests, downloaders, README
+files, and reproducibility instructions. Upload that archive directly to the
+submission system or place the same clean export on an anonymous code host.
+See [`SUPPLEMENTARY.md`](SUPPLEMENTARY.md) for the release checklist.

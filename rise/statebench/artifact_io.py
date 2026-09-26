@@ -1,9 +1,9 @@
-"""EDS-ECA 使用的按 task key 加载 JSON 实验产物模块。
+"""Load trajectory artifacts keyed by task identifier.
 
 The production loop receives Vanilla A trajectories as immutable input
-artifacts. This module scans one directory, ignores reports/errors, validates
-检查每个 JSON 是否包含唯一 task key，然后返回 runner 使用的映射。它不读取
-评分、不选择候选，只负责稳定加载 anchor，避免引入历史实验代码。
+artifacts. It scans one directory, skips reports and errors, validates unique
+task keys, and returns the mapping used by the runner. It does not score or
+select candidates.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from typing import Any
 IGNORED_NAMES = {"summary.json", "score_summary.json", "report.json", "report_scores.json"}
 
 
-# 函数作用：读取目录中的任务 JSON，跳过汇总文件，并按 task_key 建立索引。
 def read_rows(directory: Path) -> dict[str, dict[str, Any]]:
     """Load one completed trajectory per task key from an artifact directory."""
     rows = {}

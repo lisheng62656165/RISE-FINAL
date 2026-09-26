@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a reproducible environment for the bundled OccuBench runner."""
+"""Create a reproducible environment for the OccuBench runner."""
 from __future__ import annotations
 
 import os
@@ -20,19 +20,8 @@ def main() -> None:
     if not VENV.exists():
         subprocess.check_call([sys.executable, "-m", "venv", str(VENV)])
     python = python_in_venv()
-    if sys.version_info[:2] == (3, 12) and sys.platform.startswith("linux"):
-        wheel_dir = ROOT / "vendor" / "wheels-linux-py312"
-    elif sys.version_info[:2] == (3, 12) and os.name == "nt":
-        wheel_dir = ROOT / "vendor" / "wheels-win-py312"
-    else:
-        wheel_dir = None
-    if wheel_dir is not None and wheel_dir.exists():
-        command = [str(python), "-m", "pip", "install", "--no-index", "--find-links", str(wheel_dir),
-                   "-r", str(ROOT / "requirements.txt")]
-    else:
-        print("No bundled wheel set matches this platform; using the configured package index.",
-              flush=True)
-        command = [str(python), "-m", "pip", "install", "-r", str(ROOT / "requirements.txt")]
+    print("Installing pinned dependencies from the configured package index.", flush=True)
+    command = [str(python), "-m", "pip", "install", "-r", str(ROOT / "requirements.txt")]
     subprocess.check_call(command)
     print(f"Environment ready: {python}")
 

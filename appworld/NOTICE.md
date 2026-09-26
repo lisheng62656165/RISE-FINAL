@@ -1,10 +1,10 @@
 # Licenses and provenance
 
 - Original research runner and adapters: Apache-2.0 (see LICENSE).
-- APPWorld: https://github.com/stonybrooknlp/appworld, bundled PyPI wheel
+- APPWorld: https://github.com/stonybrooknlp/appworld, pinned PyPI wheel
   `appworld==0.1.3.post1`, the version used by the research environment.
 - Official data bundle: https://s3.us-west-2.amazonaws.com/appworld.dev/data-0.1.0.bundle
-  is included unchanged in `assets/`. Dataset/app code is protected material:
+  is downloaded unchanged into the ignored `assets/` directory. Dataset/app code is protected material:
   Apache-2.0 WITH an additional requirement to redistribute protected content
   and derivatives ONLY in encrypted form. The wheel contains encrypted apps.
   Do not publish `runtime/`, extracted app code, test task descriptions,

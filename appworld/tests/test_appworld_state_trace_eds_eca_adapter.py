@@ -59,6 +59,15 @@ def test_selector_packet_omits_verbose_documentation_but_keeps_public_summary():
     assert packet["candidate_A"]["summary"]["documentation_call_count"] == 1
 
 
+def test_selector_packet_rejects_evaluator_fields():
+    events = compile_appworld_public_events(
+        _trace("apis.mail.send(to='x')", "ok")
+    )
+    events[0]["evaluation_success"] = True
+    packet = appworld_selector_packet("send mail", events, events)
+    assert "evaluation_success" not in json.dumps(packet)
+
+
 def test_faithful_adapter_keeps_candidate_local_event_provenance():
     events = compile_appworld_public_events(_trace("apis.mail.send(to='x')", "ok"))
     left = namespace_appworld_events(events, "A")

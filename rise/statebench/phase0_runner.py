@@ -1,10 +1,10 @@
-"""为 StateTrace-EDS-ECA 生成同配置 Vanilla A，并提供共享运行工具。
+"""Generate the shared Vanilla A anchor for StateTrace-EDS-ECA.
 
-完整方法必须从未经事件指导和 selector 处理的 Vanilla 轨迹开始。本文件读取
-StateBench 固定 70/30/50 划分，在 fresh 环境中使用同一 MIMO 配置执行任务，
-保存公开 conversation、工具调用结果和基础机制统计。它还向主 runner 提供
-split 读取、公开调用统计和原子 JSON 写入函数。这里不包含任何历史 policy、
-Best-of-K、FRD repair controller 或事件选择逻辑；生成结果只作为后续 A anchor。
+The full method starts from an unguided Vanilla trajectory. This module runs the
+prescribed StateBench 70/30/50 split with the shared MIMO configuration and
+writes the public conversation, tool results, and basic mechanism statistics.
+It also provides split loading, public-call summaries, and atomic JSON writes.
+Selection and event credit are deliberately outside this anchor runner.
 """
 
 from __future__ import annotations
@@ -29,7 +29,6 @@ def bundled_benchmark_root() -> Path:
     return Path(__file__).resolve().parent / "benchmark"
 
 
-# 函数作用：解析 Vanilla A 生成所需的 StateBench、split、任务与并发参数。
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate Vanilla anchors for StateTrace-EDS-ECA.")
     parser.add_argument("--statebench-root", type=Path, default=bundled_benchmark_root())
@@ -43,7 +42,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# 函数作用：读取并校验 StateBench 70/30/50 固定划分中的任务 ID。
 def read_split_ids(root: Path, domain: str, split: str) -> list[str]:
     path = root / "state_bench" / "domains" / domain / "splits" / "train_dev_70_30.json"
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -54,7 +52,6 @@ def read_split_ids(root: Path, domain: str, split: str) -> list[str]:
     return values
 
 
-# 函数作用：按 split、cohort 或显式 task 参数枚举 Vanilla A 任务。
 def selected_jobs(args: argparse.Namespace) -> list[tuple[str, str]]:
     if args.cohort_file:
         payload = json.loads(args.cohort_file.read_text(encoding="utf-8"))
@@ -87,12 +84,10 @@ def selected_jobs(args: argparse.Namespace) -> list[tuple[str, str]]:
     return result
 
 
-# 函数作用：把对象序列化为键顺序稳定的 JSON，供公开调用比较。
 def canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
 
 
-# 函数作用：根据公开工具返回判断该调用是否明确失败。
 def tool_result_failed(value: Any) -> bool:
     if value is None:
         return True
@@ -101,7 +96,6 @@ def tool_result_failed(value: Any) -> bool:
     return False
 
 
-# 函数作用：统计轨迹中公开可见的调用、失败和相同结果重复行为。
 def public_mechanisms(conversation: list[dict[str, Any]]) -> dict[str, Any]:
     calls: list[dict[str, Any]] = []
     for turn_index, message in enumerate(conversation):
@@ -130,7 +124,6 @@ def public_mechanisms(conversation: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-# 函数作用：在 fresh StateBench 环境中运行一个不带方法指导的 Vanilla A。
 def run_one(args: argparse.Namespace, domain_name: str, task_id: str) -> dict[str, Any]:
     started = time.monotonic()
     sys.path.insert(0, str(args.statebench_root))
@@ -183,7 +176,6 @@ def run_one(args: argparse.Namespace, domain_name: str, task_id: str) -> dict[st
     return row
 
 
-# 函数作用：使用临时文件原子写出 UTF-8 JSON，避免中断留下半文件。
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -191,7 +183,6 @@ def write_json(path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
-# 函数作用：并发生成缺失的 Vanilla anchors，并记录成功、错误和运行配置。
 def main() -> None:
     args = parse_args()
     if args.workers < 1:

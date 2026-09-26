@@ -68,13 +68,11 @@ credentials, or launch a run. Suggested instruction:
 > not failures. Report overall and category metrics, including valid-label
 > counts, only after scoring.
 
-The model is not bundled. A user must provide a model endpoint and API key;
-that is the only external service required for a live evaluation. A compatible
-Python interpreter must already be installed because an application folder
-cannot include the interpreter. No benchmark or world-model download is
-needed. For Windows/Linux x86_64 with Python 3.12, dependencies are bundled as
-offline wheels; other supported Python 3.10+ or platforms install
-requirements.txt from a package index. A ChatGPT web subscription alone is
+The model is not bundled. A user must provide a model endpoint and API key.
+A compatible Python interpreter must already be installed because an
+application folder cannot include the interpreter. No benchmark or world-model
+download is needed; pinned Python dependencies are installed from the
+configured package index. A ChatGPT web subscription alone is
 not an API credential: use a model ID enabled for API access, its API endpoint,
 and a valid API key. The provider must support OpenAI-compatible Chat
 Completions, tool/function calls, and the structured responses used by this
@@ -84,8 +82,7 @@ providers can be used by supplying their model ID and `/v1` base URL.
 ## Setup
 
 The included data and source code are sufficient; no dataset download is
-needed. Offline dependency wheels are included for Linux x86_64/Python 3.12
-and Windows x86_64/Python 3.12:
+needed. Install the pinned dependencies with:
 
 ~~~bash
 python3.12 bootstrap.py
@@ -100,8 +97,7 @@ py -3.12 bootstrap.py
 ~~~
 
 For another platform or Python version, use Python 3.10+ and install
-requirements.txt with pip; this is the only setup path that may need package
-index access.
+`requirements.txt` with pip.
 
 ## Full 382-Task Run
 

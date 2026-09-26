@@ -1,8 +1,8 @@
-"""EDS-ECA 的公开证据投影和防泄漏边界。
+"""Project public evidence and enforce the online information boundary.
 
 Every online event, disagreement, frontier, and selector packet passes through
 this boundary. It retains only public conversation/tool material and rejects
-已知的 evaluator、reward、gold-state 和 hidden-target 字段。
+known evaluator, reward, gold-state, and hidden-target fields.
 """
 
 from __future__ import annotations
@@ -19,7 +19,6 @@ FORBIDDEN_FIELDS = {
 }
 
 
-# 函数作用：递归拒绝包含隐藏要求、gold state 或 evaluator 结果的在线 payload。
 def assert_public_payload(value: Any, path: str = "root") -> None:
     """Fail immediately when an online payload contains evaluator-only data."""
     if isinstance(value, Mapping):
@@ -32,7 +31,6 @@ def assert_public_payload(value: Any, path: str = "root") -> None:
             assert_public_payload(child, f"{path}[{index}]")
 
 
-# 函数作用：从轨迹记录中仅投影在线方法允许使用的公开对话与元数据。
 def public_projection(row: Mapping[str, Any]) -> dict[str, Any]:
     """Project a stored trajectory to the public fields used by the method."""
     projection = {
