@@ -87,6 +87,33 @@ def test_faithful_keeps_public_credit_not_outcomes(monkeypatch):
     assert 'FORBIDDEN_SENTINEL' not in str(proposal_messages([{'role': 'user', 'content': 'task'}], credit, 'C'))
 
 
+def test_faithful_fallback_retains_incumbent_when_display_order_is_reversed(monkeypatch):
+    from types import SimpleNamespace
+    from scripts import run_appworld_state_trace_eds_eca as runner
+    from src.appworld_state_trace_eds_eca_adapter import compile_appworld_public_events
+
+    incumbent = {'name': 'incumbent', 'public_events': compile_appworld_public_events([
+        {'code': 'apis.mail.search(query="old")', 'execution_output': '[]'}])}
+    proposal = {'name': 'proposal', 'public_events': compile_appworld_public_events([
+        {'code': 'apis.mail.send(to="new")', 'execution_output': 'sent'}])}
+
+    class FakeClient:
+        def __init__(self, settings): pass
+        def complete_messages_with_trace(self, messages, **kwargs):
+            return SimpleNamespace(text='not json', request={}, response={})
+
+    monkeypatch.setattr(runner, 'LLMClient', FakeClient)
+    monkeypatch.setattr(runner, 'settings', lambda seed: Settings('https://example.invalid/v1', 'fake', 'gpt-4.1'))
+    selected, credit, details = runner.choose(
+        'send mail', incumbent, proposal, 0, 2048, 0, 1, None, None,
+    )
+    assert details['display_order'] == ['proposal', 'incumbent']
+    assert details['fallback'] is True
+    assert details['selected_candidate'] == 'incumbent'
+    assert selected is incumbent
+    assert credit['available'] is False
+
+
 def test_shared_vanilla_mismatch_detected(tmp_path):
     from run import share_a
     import pytest
@@ -100,7 +127,7 @@ def test_shared_vanilla_mismatch_detected(tmp_path):
         share_a(a, b, ['t'])
 
 
-def test_main_experiment_seed_defaults_match_challenge_record(tmp_path, monkeypatch):
+def test_default_seed_protocol_reaches_challenge_runner(tmp_path, monkeypatch):
     import run as driver
     import sys
     from types import ModuleType

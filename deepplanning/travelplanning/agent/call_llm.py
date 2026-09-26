@@ -136,14 +136,18 @@ def create_client(model_name: str, model_config: Optional[Dict[str, Any]] = None
         model_config = load_model_config(model_name)
     
     model_type = model_config.get('model_type', 'openai')
-    base_url = os.getenv('DEEPPLANNING_OPENAI_BASE_URL', model_config['base_url'])
+    base_url = (
+        os.getenv('DEEPPLANNING_BASE_URL')
+        or os.getenv('DEEPPLANNING_OPENAI_BASE_URL')
+        or model_config['base_url']
+    )
     api_key_env = model_config.get('api_key_env')
-    api_key = os.getenv(api_key_env) if api_key_env else None
+    api_key = os.getenv('DEEPPLANNING_API_KEY') or (os.getenv(api_key_env) if api_key_env else None)
     
     if not api_key:
         raise RuntimeError(
             f"API key not found for model '{model_name}'\n"
-            f"Please set environment variable: {api_key_env}"
+            f"Please set DEEPPLANNING_API_KEY (or compatibility variable {api_key_env})"
         )
     
     if model_type == 'openai':

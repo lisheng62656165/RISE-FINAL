@@ -15,11 +15,5 @@
     "oagents_selector_base": 53403,
     "per_task_derivation": "selector_api_seed = selector_base + official test_challenge task ordinal"
   },
-  "results": {
-    "Vanilla": {"tgc": "366/417", "tgc_percent": 87.8, "sgc": "105/139", "sgc_percent": 75.5},
-    "OAgents parallel Best-of-4 (shared A)": {"tgc": "367/417", "tgc_percent": 88.0, "sgc": "108/139", "sgc_percent": 77.7},
-    "Faithful v3": {"tgc": "374/417", "tgc_percent": 89.7, "sgc": "114/139", "sgc_percent": 82.0}
-  },
-  "result_source_note": "Historical full test_challenge reference; do not treat as a result newly reproduced by this release package.",
-  "seed_policy": "These values are defaults for the reported main experiment. Runners accept explicit seed overrides for independent replications."
+  "seed_policy": "These values define the default comparison protocol. Runners accept explicit seed overrides for independent replications."
 }

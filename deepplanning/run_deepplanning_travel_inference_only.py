@@ -15,7 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.deepplanning_model_policy import PRIMARY_MODEL_CONFIG, resolve_model_identity
+from src.deepplanning_model_policy import DEFAULT_MODEL_CONFIG, resolve_model_identity
 
 
 DEFAULT_TRAVEL_ROOT = PROJECT_ROOT / "travelplanning"
@@ -7020,7 +7020,7 @@ def install_request_seed(seed: int | None) -> dict | None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--travel-root", type=Path, default=DEFAULT_TRAVEL_ROOT)
-    parser.add_argument("--model", default=PRIMARY_MODEL_CONFIG)
+    parser.add_argument("--model", default=DEFAULT_MODEL_CONFIG)
     parser.add_argument("--language", choices=("zh", "en"), default="zh")
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--max-llm-calls", type=int, default=400)
@@ -7115,6 +7115,8 @@ def main() -> None:
         default="v2_safe_escape",
     )
     args = parser.parse_args()
+    if not args.model:
+        parser.error("--model or DEEPPLANNING_MODEL is required")
 
     model_identity = resolve_model_identity(args.travel_root.parent / "models_config.json", args.model)
     runner = load_travel_runner(args.travel_root)
@@ -7146,7 +7148,6 @@ def main() -> None:
         "timestamp": datetime.now().isoformat(),
         "model": args.model,
         "api_model": model_identity["api_model"],
-        "model_config_sha256": model_identity["model_config_sha256"],
         "language": args.language,
         "workers": args.workers,
         "max_llm_calls": args.max_llm_calls,

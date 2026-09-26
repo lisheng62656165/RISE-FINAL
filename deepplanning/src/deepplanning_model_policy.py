@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 
-PRIMARY_MODEL = "mimo-v2.5-pro"
-PRIMARY_MODEL_CONFIG = "mimo-v2.5-pro"
+DEFAULT_MODEL_CONFIG = os.environ.get("DEEPPLANNING_MODEL")
 DEFAULT_MODELS_CONFIG = (
     Path(__file__).resolve().parents[1] / "models_config.json"
 )
@@ -18,18 +17,7 @@ def resolve_model_identity(models_config_path: Path, config_name: str) -> dict[s
     config = (payload.get("models") or {}).get(config_name)
     if not isinstance(config, dict):
         raise ValueError(f"Missing model config: {config_name}")
-    canonical = json.dumps(config, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return {
         "model_config": config_name,
         "api_model": str(config.get("model_name", config_name)),
-        "model_config_sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
     }
-
-
-def resolve_primary_model_identity(models_config_path: Path) -> dict[str, Any]:
-    identity = resolve_model_identity(models_config_path, PRIMARY_MODEL_CONFIG)
-    if identity["api_model"] != PRIMARY_MODEL:
-        raise ValueError(
-            f"{PRIMARY_MODEL_CONFIG} must resolve to {PRIMARY_MODEL}, got {identity['api_model']}"
-        )
-    return identity

@@ -47,7 +47,7 @@ not separate algorithms:
 | RISE | `rise/statebench/` | StateTrace-EDS-ECA |
 | RISE AppWorld adapter | `appworld/` | Faithful v3 / StateTrace-EDS-ECA |
 | RISE OccuBench adapter | `rise/occubench/` | StateBench-EDS-ECA |
-| RISE DeepPlanning adapter | `deepplanning/` | `statetrace_dsr` |
+| RISE DeepPlanning adapter | `deepplanning/` | StateTrace-EDS-ECA |
 
 ## Repository layout
 
@@ -129,7 +129,7 @@ cd rise/occubench
 py -3.12 bootstrap.py
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe run_full_comparison.py `
-  --config configs/main_results.json `
+  --config configs/default_experiment.json `
   --base-url $env:OPENAI_BASE_URL --api-key-env OPENAI_API_KEY `
   --workers 8 --selector-workers 8 --limit 382
 ```
@@ -144,8 +144,9 @@ cd deepplanning
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe download_assets.py
-$env:DEEPSEEK_API_KEY = "YOUR_API_KEY"
-$env:DEEPPLANNING_OPENAI_BASE_URL = "https://api.deepseek.com/v1"
+$env:DEEPPLANNING_API_KEY = "YOUR_API_KEY"
+$env:DEEPPLANNING_BASE_URL = "https://your-provider.example/v1"
+$env:DEEPPLANNING_MODEL = "YOUR_MODEL_CONFIG_NAME"
 .\.venv\Scripts\python.exe verify_release.py
 ```
 
@@ -176,7 +177,7 @@ controlled by the account used to publish it and therefore cannot be made
 account-anonymous by repository contents alone.
 
 See [`PAPER_ALIGNMENT.md`](PAPER_ALIGNMENT.md) for the paper-to-code map,
-historical naming policy, data boundaries, and result tables.
+historical naming policy, and data boundaries.
 See [`CODE_REVIEW.md`](CODE_REVIEW.md) for the reviewer-oriented implementation
 audit, residual reproduction caveats, and the release verification record.
 See [`SOURCES.md`](SOURCES.md) for upstream revisions, asset origins, licenses,

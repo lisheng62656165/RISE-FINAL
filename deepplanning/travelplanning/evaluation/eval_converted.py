@@ -16,6 +16,11 @@ from .constraints_commonsense import eval_commonsense, EVALUATION_DIMENSIONS
 from .constraints_hard import eval_hard
 
 
+def plan_sample_id(path: Path) -> str:
+    match = re.match(r'id_(\d+)_converted\.json', path.name)
+    return match.group(1) if match else path.stem.replace('_converted', '').replace('id_', '')
+
+
 def calculate_weighted_score(commonsense_results: Dict[str, Tuple[bool, Optional[str]]]) -> Dict[str, Any]:
     """
     Calculate weighted commonsense score based on EVALUATION_DIMENSIONS.
@@ -143,13 +148,7 @@ def process_single_evaluation(
     """
     sample_id = None
     try:
-        # Extract sample_id from filename (format: id_X_converted.json)
-        filename = plan_file.name
-        match = re.match(r'id_(\d+)_converted\.json', filename)
-        if match:
-            sample_id = match.group(1)
-        else:
-            sample_id = plan_file.stem.replace('_converted', '').replace('id_', '')
+        sample_id = plan_sample_id(plan_file)
         
         with print_lock:
             print(f"\n{'='*80}")
@@ -302,12 +301,7 @@ def evaluate_plans(
     plan_files = []
     skipped_files = []
     for plan_file in all_plan_files:
-        # Extract sample_id from filename
-        match = re.match(r'id_(\d+)_converted\.json', plan_file.name)
-        if match:
-            sample_id = match.group(1)
-        else:
-            sample_id = plan_file.stem.replace('_converted', '').replace('id_', '')
+        sample_id = plan_sample_id(plan_file)
         
         if sample_id in valid_sample_ids:
             plan_files.append(plan_file)
@@ -366,7 +360,7 @@ def evaluate_plans(
                     print(f"❌ File {plan_file.name} encountered uncaught exception: {e}\n")
                 results.append({
                     'success': False,
-                    'sample_id': plan_file.name,
+                    'sample_id': plan_sample_id(plan_file),
                     'error': str(e)
                 })
     
@@ -545,7 +539,9 @@ def evaluate_plans(
     
     summary_data = {
         'total_test_samples': total_test_samples,
+        'test_sample_ids': sorted(valid_sample_ids, key=int),
         'plan_files_found': len(plan_files),
+        'plan_file_sample_ids': sorted((plan_sample_id(path) for path in plan_files), key=int),
         'evaluation_success_count': success_count,
         'evaluation_failed_count': failed_count,
         'elapsed_time': elapsed_time,
@@ -603,4 +599,3 @@ if __name__ == "__main__":
     
     print(f"Evaluation completed: {result['success']}/{result['total']} succeeded")
     print(f"composite score: {result['metrics']['composite_score']:.2%}")
-

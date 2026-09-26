@@ -7,47 +7,18 @@ It contains the benchmark data, Language World Model environment, verifier,
 the StateBench EDS-ECA adapter, and the OAgents list-wise Best-of-4 adapter.
 All benchmark-specific files are inside this folder.
 
-## Reported Results
+## Experiment protocol
 
-The default experiment uses `configs/main_results.json`: all 382 tasks,
-`deepseek-v4.1-flash` for agent/world/selector/verifier, and the seed settings
-documented in [Main Experiment](MAIN_EXPERIMENT.md). Command-line options
-override the config, so other models and seeds are supported.
+The default configuration covers all 382 tasks. Command-line options override
+its model, seeds, limits, and concurrency. It runs RISE, OAgents Best-of-4, and
+the shared Vanilla anchor, then generates overall and category metrics under
+the selected output directory. No precomputed scores or historical run IDs are
+stored in this source release.
 
-| Method | Tasks | Passed | Pass@1 |
-|---|---:|---:|---:|
-| **StateBench-EDS-ECA Original FINAL** | 382 | 242 | **63.35%** |
-| **OAgents Best-of-4, selector seed=53403** | 382 | 236 | **61.78%** |
-| **Vanilla** | 382 | 190 | **49.74%** |
-
-All three methods have valid verifier labels for the complete 382-task cohort.
-Invalid API, timeout, or malformed verifier responses were retried and are not
-counted as failures. The released Vanilla-A score is computed from the same A
-anchor trajectories and the same verifier configuration as the paired EDS-ECA
-and Best-of-4 scores. The adopted Best-of-4 result reselected four existing
-candidates with a fixed selector API seed of 53403; it did not regenerate
-candidates. The earlier 243/382 (63.61%) result omitted the selector API seed
-and is historical, not the default main result. Rerunning a model API is not
-guaranteed to reproduce an identical numerical result, even with the same seed.
-
-These are the reported evaluation results. Per-task run outputs are generated
-under `results/` when the experiment is run and are intentionally not checked
-into this source repository.
-
-## Category Breakdown
-
-| Method | Avg | Agri | Biz | Comm | Edu | Hlth | Ind | Pub | Sci | Tech | Trans |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| StateBench-EDS-ECA Original FINAL | 242/382 (63.35%) | 22/31 (70.97%) | 42/63 (66.67%) | 25/36 (69.44%) | 14/32 (43.75%) | 16/21 (76.19%) | 30/55 (54.55%) | 13/25 (52.00%) | 13/16 (81.25%) | 31/50 (62.00%) | 36/53 (67.92%) |
-| OAgents Best-of-4, selector seed=53403 | 236/382 (61.78%) | 25/31 (80.65%) | 42/63 (66.67%) | 18/36 (50.00%) | 11/32 (34.38%) | 15/21 (71.43%) | 31/55 (56.36%) | 18/25 (72.00%) | 10/16 (62.50%) | 31/50 (62.00%) | 35/53 (66.04%) |
-| Vanilla | 190/382 (49.74%) | 18/31 (58.06%) | 35/63 (55.56%) | 15/36 (41.67%) | 12/32 (37.50%) | 11/21 (52.38%) | 25/55 (45.45%) | 13/25 (52.00%) | 8/16 (50.00%) | 27/50 (54.00%) | 26/53 (49.06%) |
-
-The full-precision machine-readable category report and Markdown table are
-generated under the selected run's `scores/` directory. Recompute them from a
-completed run with:
+Recompute the category table from a completed run with:
 
 ~~~bash
-python aggregate_occubench_metrics.py --data-root data --scores-dir results/main_selector53403/scores --out results/main_selector53403/scores/category_metrics.json
+python aggregate_occubench_metrics.py --data-root data --scores-dir results/run/scores --out results/run/scores/category_metrics.json
 ~~~
 
 ## Codex Run Instructions
@@ -63,7 +34,7 @@ credentials, or launch a run. Suggested instruction:
 > print it, and never write it to the repository. First run tests and CLI help,
 > then run run_full_comparison.py for StateBench-EDS-ECA Original,
 > OAgents Best-of-4, and Vanilla on the same 382 tasks. Use
-> configs/main_results.json unless I provide model or seed overrides. Resume the same output
+> configs/default_experiment.json unless I provide model or seed overrides. Resume the same output
 > directory after interruption. Keep invalid verifier/API responses pending,
 > not failures. Report overall and category metrics, including valid-label
 > counts, only after scoring.
@@ -112,7 +83,7 @@ Then run:
 
 ~~~bash
 python run_full_comparison.py \
-  --config configs/main_results.json \
+  --config configs/default_experiment.json \
   --base-url "$OPENAI_BASE_URL" \
   --api-key-env OPENAI_API_KEY \
   --seed 53403 \
@@ -129,7 +100,7 @@ On Windows PowerShell, set the same variables and run:
 ~~~powershell
 $env:OPENAI_BASE_URL = "https://api.openai.com/v1"
 $env:OPENAI_API_KEY = "REDACTED"
-python run_full_comparison.py --config configs/main_results.json --base-url $env:OPENAI_BASE_URL `
+python run_full_comparison.py --config configs/default_experiment.json --base-url $env:OPENAI_BASE_URL `
   --api-key-env OPENAI_API_KEY --seed 53403 --selector-seed 77113 `
   --oagents-selector-seed 53403 `
   --workers 8 --selector-workers 8 --max-tokens 16384 --limit 382
@@ -147,7 +118,7 @@ The endpoint must support the request fields used by the selected model. For a l
 use its /v1 URL and the corresponding model name. The runner stores only
 redacted configuration metadata.
 
-The run creates results/main_selector53403/ with eds_eca, oagents_bon4, and
+The run creates results/run/ with eds_eca, oagents_bon4, and
 scores subdirectories. The score directory contains scores.jsonl,
 vanilla_scores.jsonl, category_metrics.json/.md, and overall_results.json/.md.
 The overall report records per-method valid-label counts and remains marked
@@ -158,7 +129,7 @@ The default seeds are `53403` for cohort/Python sampling, `77113` for the
 EDS-ECA selector base, and fixed `53403` for each OAgents selector API call.
 `--selector-seed` changes only EDS-ECA; `--oagents-selector-seed` changes only
 OAgents. Agent generation does not explicitly send an API seed or temperature;
-it inherits provider defaults. See MAIN_EXPERIMENT.md for the exact derivation.
+it inherits provider defaults.
 The run is resumable: EDS-ECA uses stage checkpoints and resume, while the
 Best-of-4 runner skips task directories that already have result.json. Never
 mix output directories from different models, endpoints, or sampling

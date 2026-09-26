@@ -5,6 +5,7 @@ import copy
 import json
 import os
 import random
+import re
 import shutil
 import sys
 import threading
@@ -16,9 +17,9 @@ from typing import Any
 
 from openai import OpenAI
 
+from deepplanning_credit import project_credit_state, project_event_shape
 
-MODEL = os.environ.get("DEEPPLANNING_MODEL", "mimo-v2.5-pro")
-API_MODEL = os.environ.get("DEEPPLANNING_API_MODEL", MODEL)
+
 ISSUE_TYPES = (
     "NONE", "FAILURE_RECOVERY", "TARGET_IDENTITY", "PARAMETER_GROUNDING",
     "ACTION_ORDER", "VERIFICATION", "TASK_COVERAGE", "STOPPING", "OTHER",
@@ -35,7 +36,7 @@ ISSUE_DIRECTIVES = {
     "OTHER": "Avoid the rejected event structure and re-ground the next action from current evidence.",
 }
 SELECT_SYSTEM = (
-    "StateTrace-EDS-ECA compares two completed public trajectories for the same visible task. "
+    "RISE compares two completed public trajectories for the same visible task. "
     "Select the stronger trajectory, then assign event-level credit for the next independent rollout. "
     "Prefer exact tool-grounded request coverage, valid targets and parameters, coherent action order, "
     "successful recovery, verification, and correct stopping. Preserve IDs must belong to the selected "
@@ -72,10 +73,25 @@ SELECT_TOOL = {
 }
 
 
-def collect_stream_tool_calls(stream: Any) -> list[dict[str, Any]]:
-    """Collect fragmented OpenAI-compatible tool calls from a streamed response."""
+def collect_tool_calls(response: Any) -> list[dict[str, Any]]:
+    """Normalize tool calls from streamed or non-streamed compatible responses."""
+    if getattr(response, "choices", None):
+        message = getattr(response.choices[0], "message", None)
+        if message is not None:
+            calls = []
+            for call in getattr(message, "tool_calls", None) or []:
+                function = getattr(call, "function", None)
+                calls.append({
+                    "id": str(getattr(call, "id", "") or ""),
+                    "type": "function",
+                    "function": {
+                        "name": str(getattr(function, "name", "") or ""),
+                        "arguments": str(getattr(function, "arguments", "") or ""),
+                    },
+                })
+            return calls
     calls: dict[int, dict[str, Any]] = {}
-    for chunk in stream:
+    for chunk in response:
         if not getattr(chunk, "choices", None):
             continue
         for call in getattr(chunk.choices[0].delta, "tool_calls", None) or []:
@@ -179,7 +195,7 @@ def structural_frontier(candidate: dict[str, Any], credit: dict[str, Any] | None
             }
             for event in ranked
         ],
-        "event_credit_state": copy.deepcopy(credit or {"available": False}),
+        "event_credit_state": project_credit_state(credit),
         "instruction": (
             "Complete the entire visible task in a fresh environment. Treat prior structures as hypotheses. "
             "Re-query facts with legal tools; never replay old identifiers, values, results, or calls. "
@@ -193,7 +209,7 @@ def structural_frontier(candidate: dict[str, Any], credit: dict[str, Any] | None
 
 def deepplanning_frontier(candidate: dict[str, Any], credit: dict[str, Any] | None) -> dict[str, Any]:
     from deepplanning_adapter import adapter_frontier
-    return adapter_frontier(candidate, credit)
+    return adapter_frontier(candidate, project_credit_state(credit))
 
 
 def material_disagreement(left: dict[str, Any], right: dict[str, Any]) -> bool:
@@ -204,7 +220,7 @@ def material_disagreement(left: dict[str, Any], right: dict[str, Any]) -> bool:
 
 def select_and_credit(
     client: OpenAI, left: dict[str, Any], right: dict[str, Any], ordinal: int, seed: int,
-    adapter: bool = False,
+    model: str, max_tokens: int, adapter: bool = False,
 ) -> tuple[int, dict[str, Any]]:
     order = [0, 1]
     random.Random(seed + ordinal).shuffle(order)
@@ -227,22 +243,18 @@ def select_and_credit(
         allowed[shown_index] = {event["event_id"] for event in remapped}
     try:
         response = client.chat.completions.create(
-            model=API_MODEL,
+            model=model,
             messages=[{"role": "system", "content": SELECT_SYSTEM + (DEEPPLANNING_SELECT_ADDENDUM if adapter else "")},
                       {"role": "user", "content": canonical({"candidates": shown})}],
             tools=[SELECT_TOOL],
             tool_choice={"type": "function", "function": {"name": "select_and_credit_events"}},
             temperature=0,
-            max_tokens=16384,
-            stream=True,
-            extra_body={
-                "seed": seed + ordinal,
-                "chat_template_kwargs": {"enable_thinking": True},
-                "reasoning_budget": 16384,
-            },
+            max_tokens=max_tokens,
+            seed=seed + ordinal,
+            stream=False,
             timeout=600,
         )
-        calls = collect_stream_tool_calls(response)
+        calls = collect_tool_calls(response)
         arguments = json.loads(calls[0]["function"]["arguments"]) if calls else {}
         selected_shown = int(arguments.get("candidate_index", -1))
         if selected_shown not in (0, 1):
@@ -261,16 +273,21 @@ def select_and_credit(
         selected_original = order[selected_shown]
         credit = {
             "available": True,
-            "preserve_events": [event for event in shown[selected_shown]["events"] if event["event_id"] in preserve][:6],
-            "avoid_events": [event for event in shown[rejected_shown]["events"] if event["event_id"] in avoid][:6],
+            "preserve_events": [project_event_shape(event) for event in shown[selected_shown]["events"] if event["event_id"] in preserve][:6],
+            "avoid_events": [project_event_shape(event) for event in shown[rejected_shown]["events"] if event["event_id"] in avoid][:6],
             "unresolved_issue_type": issue_type,
             "unresolved_issue": ISSUE_DIRECTIVES[issue_type],
-            "reason": str(arguments.get("reason") or ""),
             "supporting_event_ids": supporting,
             "public_only": True,
             "outcome_used": False,
+            "literal_replay": False,
         }
-        return selected_original, {"fallback": False, "selected": selected_original, "credit": credit}
+        return selected_original, {
+            "fallback": False,
+            "selected": selected_original,
+            "reason": str(arguments.get("reason") or ""),
+            "credit": project_credit_state(credit),
+        }
     except Exception as error:
         return 0, {
             "fallback": True, "selected": 0, "fallback_reason": str(error),
@@ -332,12 +349,12 @@ def run_shopping_task(args: argparse.Namespace, level: int, case_id: int, ordina
             case_dir.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(shopping / f"database_level{level}" / f"case_{case_id}", case_dir)
         agent = ShoppingFnAgent(
-            model=MODEL, sample_id=str(case_id), database_base_path=str(stage_root),
+            model=args.model, sample_id=str(case_id), database_base_path=str(stage_root),
             tool_schema_path=str(shopping / "tools/shopping_tool_schema.json"),
         )
         prompt = (
             f"{getattr(prompt_lib, f'SYSTEM_PROMPT_level{level}')}\n\n"
-            f"StateTrace-EDS-ECA round {stage_number + 1}.\n{canonical(frontier)}"
+            f"RISE round {stage_number + 1}.\n{canonical(frontier)}"
         )
         messages = agent.run(
             user_query=query, system_prompt=prompt, save_messages=True,
@@ -347,6 +364,7 @@ def run_shopping_task(args: argparse.Namespace, level: int, case_id: int, ordina
         if material_disagreement(incumbent, proposal):
             selected, selector = select_and_credit(
                 args.selector_client, incumbent, proposal, ordinal * 3 + stage_number, args.selector_seed,
+                model=args.api_model, max_tokens=args.selector_max_tokens,
             )
         else:
             selected, selector = 0, {
@@ -370,7 +388,7 @@ def run_shopping_task(args: argparse.Namespace, level: int, case_id: int, ordina
     write_json(output, {
         "task": f"shopping::L{level}::{case_id}", "anchor_origin": "A",
         "final_origin": incumbent_origin, "final_source": str(final_case), "stages": stages,
-        "method": "StateTrace-EDS-ECA", "public_only": True, "online_outcome_used": False,
+        "method": "RISE", "public_only": True, "online_outcome_used": False,
     })
     return {"task": f"shopping::L{level}::{case_id}", "status": "ok", "final_origin": incumbent_origin}
 
@@ -416,27 +434,28 @@ def run_travel_task(args: argparse.Namespace, language: str, task_id: int, ordin
             messages = message_rows(payload)
         else:
             agent = ToolsFnAgent(
-                model=MODEL, sample_id=str(task_id),
+                model=args.model, sample_id=str(task_id),
                 database_base_path=str(travel / "database" / f"database_{language}"), language=language,
             )
             prompt = (
-                f"{get_system_prompt(language)}\n\nStateTrace-EDS-ECA round {stage_number + 1}.\n"
+                f"{get_system_prompt(language)}\n\nRISE round {stage_number + 1}.\n"
                 f"{canonical(frontier)}"
             )
             final, raw_messages = agent.run(query, system_prompt=prompt, max_llm_calls=args.max_llm_calls)
             messages = agent._serialize_messages(raw_messages)
             write_json(stage_path, {
                 "id": f"id_{task_id}", "query": query, "final_plan": final,
-                "messages": messages, "language": language, "model": MODEL,
+                "messages": messages, "language": language, "model": args.model,
                 "method": (
-                    f"StateTrace-EDS-ECA-DeepPlanning-{stage}-proposal"
-                    if args.deepplanning_adapter else f"StateTrace-EDS-ECA-{stage}-proposal"
+                    f"RISE-DeepPlanning-{stage}-proposal"
+                    if args.deepplanning_adapter else f"RISE-{stage}-proposal"
                 ),
             })
         proposal = public_candidate(query, messages, f"{stage}'-E")
         if material_disagreement(incumbent, proposal):
             selected, selector = select_and_credit(
                 args.selector_client, incumbent, proposal, ordinal * 3 + stage_number, args.selector_seed,
+                model=args.api_model, max_tokens=args.selector_max_tokens,
                 adapter=args.deepplanning_adapter,
             )
         else:
@@ -464,9 +483,8 @@ def run_travel_task(args: argparse.Namespace, language: str, task_id: int, ordin
     write_json(output, {
         "task": f"travel-{language}::{task_id}", "anchor_origin": "A",
         "final_origin": incumbent_origin, "final_source": str(final_path), "stages": stages,
-        "method": (
-            "StateTrace-EDS-ECA-DeepPlanning" if args.deepplanning_adapter else "StateTrace-EDS-ECA"
-        ),
+        "method": "RISE",
+        "adapter_variant": "deepplanning-public-evidence" if args.deepplanning_adapter else "default",
     })
     return {"task": f"travel-{language}::{task_id}", "status": "ok", "final_origin": incumbent_origin}
 
@@ -484,26 +502,43 @@ def main() -> None:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--cohort", choices=("shopping", "travel-zh", "travel-en"), required=True)
+    parser.add_argument("--model", default=os.environ.get("DEEPPLANNING_MODEL"))
     parser.add_argument("--workers", type=int, default=10)
     parser.add_argument("--max-llm-calls", type=int, default=400)
     parser.add_argument("--proposal-seed", type=int, default=64639)
     parser.add_argument("--selector-seed", type=int, default=77113)
+    parser.add_argument("--selector-max-tokens", type=int, default=4096)
     parser.add_argument("--anchor-tag", default="full_vanilla_a_20260828",
                         help="Vanilla anchor tag: shopping run tag or travel_runs subdirectory.")
-    parser.add_argument("--anchor-model-slug", default="mimo-v2.5-pro",
-                        help="Filesystem-safe model slug under a travel anchor tag.")
+    parser.add_argument("--anchor-model-slug",
+                         help="Filesystem-safe model slug under a travel anchor tag.")
     parser.add_argument("--deepplanning-adapter", action="store_true",
                         help="Add public DeepPlanning schema/grounding evidence to travel selection.")
     parser.add_argument("--job-shard-count", type=int, default=1)
     parser.add_argument("--job-shard-index", type=int, default=0)
     args = parser.parse_args()
-    api_key_env = os.environ.get("DEEPPLANNING_API_KEY_ENV", "MIMO_API_KEY")
-    api_key = os.environ.get(api_key_env)
+    api_key_env = os.environ.get("DEEPPLANNING_API_KEY_ENV")
+    api_key = os.environ.get("DEEPPLANNING_API_KEY")
+    if not api_key and api_key_env:
+        api_key = os.environ.get(api_key_env)
+    if not args.model:
+        raise ValueError("--model or DEEPPLANNING_MODEL is required")
+    models_path = args.root / "models_config.json"
+    models = json.loads(models_path.read_text(encoding="utf-8")).get("models", {})
+    model_config = models.get(args.model)
+    if not isinstance(model_config, dict):
+        raise ValueError(f"Missing model config: {args.model}")
+    args.api_model = str(model_config.get("model_name") or args.model)
+    if not args.anchor_model_slug:
+        args.anchor_model_slug = re.sub(r"[^A-Za-z0-9._-]+", "-", args.model).strip("-")
     if args.workers < 1 or not api_key:
-        raise ValueError(f"positive workers and {api_key_env} are required")
+        raise ValueError("positive workers and DEEPPLANNING_API_KEY are required")
+    base_url = os.environ.get("DEEPPLANNING_BASE_URL") or os.environ.get("DEEPPLANNING_OPENAI_BASE_URL")
+    if not base_url:
+        raise ValueError("DEEPPLANNING_BASE_URL is required")
     args.selector_client = OpenAI(
         api_key=api_key,
-        base_url=os.environ.get("DEEPPLANNING_BASE_URL", "https://api.xiaomimimo.com/v1"),
+        base_url=base_url,
         max_retries=2,
         timeout=60.0,
     )
@@ -536,9 +571,8 @@ def main() -> None:
             results.append(row)
             print(json.dumps(row, ensure_ascii=False), flush=True)
     summary = {
-        "method": (
-            "StateTrace-EDS-ECA-DeepPlanning" if args.deepplanning_adapter else "StateTrace-EDS-ECA"
-        ), "cohort": args.cohort, "full_cohort_test": True,
+        "method": "RISE", "cohort": args.cohort,
+        "full_cohort_test": args.job_shard_count == 1,
         "tasks": len(selected_jobs), "ok": sum(row["status"] in {"ok", "existing"} for row in results),
         "errors": sum(row["status"] == "error" for row in results), "workers": args.workers,
         "job_shard_count": args.job_shard_count, "job_shard_index": args.job_shard_index,

@@ -133,8 +133,14 @@ def choose(
         selector_messages(packet), extra_payload=selector_payload
     )
     decision = parse_credit_decision(result.text, public_event_ids(display_events[0]), public_event_ids(display_events[1]))
-    selected_display = displayed[0] if decision.choice == "A" else displayed[1]
-    selected = selected_display
+    if decision.fallback:
+        # Algorithm A.1 defines fallback in semantic candidate space: retain the
+        # accepted trajectory, regardless of randomized display order.
+        selected = incumbent
+        selected_display = incumbent
+    else:
+        selected_display = displayed[0] if decision.choice == "A" else displayed[1]
+        selected = selected_display
     credit = build_credit_state(display_events[0], display_events[1], decision)
     details = {
         "choice": decision.choice, "fallback": decision.fallback, "reason": decision.reason,

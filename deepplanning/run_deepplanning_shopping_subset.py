@@ -12,7 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.deepplanning_model_policy import PRIMARY_MODEL_CONFIG, resolve_model_identity
+from src.deepplanning_model_policy import DEFAULT_MODEL_CONFIG, resolve_model_identity
 from src.deepplanning_run_audit import install_call_audit
 
 
@@ -110,7 +110,7 @@ def evaluate_subset(shopping_root: Path, final_dir: Path) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--shopping-root", type=Path, default=DEFAULT_SHOPPING_ROOT)
-    parser.add_argument("--model", default=PRIMARY_MODEL_CONFIG)
+    parser.add_argument("--model", default=DEFAULT_MODEL_CONFIG)
     parser.add_argument("--level", type=int, choices=(1, 2, 3), required=True)
     parser.add_argument("--case-ids", nargs="+", required=True)
     parser.add_argument("--run-name")
@@ -126,6 +126,8 @@ def main() -> None:
         help="Evaluate completed cases and record failed IDs instead of aborting the whole subset.",
     )
     args = parser.parse_args()
+    if not args.model:
+        parser.error("--model or DEEPPLANNING_MODEL is required")
 
     model_identity = resolve_model_identity(args.shopping_root.parent / "models_config.json", args.model)
     case_ids = parse_case_ids(args.case_ids)
@@ -188,7 +190,6 @@ def main() -> None:
     manifest = {
         "model": args.model,
         "api_model": model_identity["api_model"],
-        "model_config_sha256": model_identity["model_config_sha256"],
         "level": args.level,
         "case_ids": case_ids,
         "workers": min(args.workers, len(case_ids)),

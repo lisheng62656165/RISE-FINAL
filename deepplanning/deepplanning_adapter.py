@@ -4,6 +4,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from deepplanning_credit import project_credit_state
+
 DAY_RE = re.compile(r"(?:^|\n)\s*(?:day|第\s*)\s*(\d+)", re.IGNORECASE)
 TIME_RE = re.compile(r"\b(?:[01]?\d|2[0-3]):[0-5]\d\b")
 TRAVEL_TOOLS = {"query_flight_info", "query_train_info", "query_route_info", "query_hotel_info"}
@@ -48,6 +50,6 @@ def adapter_frontier(candidate: dict[str, Any], credit: dict[str, Any] | None) -
             "parseable daily plans, time entries, successful visible travel lookups, and visible tool "
             "failures. Use these as evidence only; never infer evaluator labels or hidden state."
         ),
-        "event_credit_state": credit or {"available": False},
+        "event_credit_state": project_credit_state(credit),
         "public_only": True, "outcome_used": False,
     }

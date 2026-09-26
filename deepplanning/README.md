@@ -1,15 +1,10 @@
 # RISE on DeepPlanning
 
-This directory contains the DeepPlanning Travel and Shopping adapter used in
-the paper. Official evaluators, agent code, the RISE implementation, and the
-Best-of-4 selector are included. Large local tool databases are downloaded
-from the official `Qwen/DeepPlanning` release by `download_assets.py`. The
-legacy output key `statetrace_dsr` is retained by the evaluator for script
-compatibility; it refers to this RISE adapter, not to a separate paper method.
-
-The packaged cohort is test-only: Shopping has 120 cases across levels 1/2/3
-and Travel has 120 Chinese plus 120 English cases. No train/dev split is
-created in this release.
+This directory contains the RISE adapter, independent Best-of-4 selector,
+official Travel evaluator, and the upstream Travel/Shopping agent code needed
+to execute DeepPlanning. The manuscript evaluation uses Travel: 120 Chinese
+tasks and the same 120 tasks in English. Shopping is retained as an auxiliary
+execution adapter and is not folded into the Travel table.
 
 ## Setup
 
@@ -17,102 +12,122 @@ created in this release.
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe download_assets.py
-$env:DEEPSEEK_API_KEY = "YOUR_API_KEY"
-$env:DEEPPLANNING_OPENAI_BASE_URL = "https://api.deepseek.com/v1"
+$env:DEEPPLANNING_API_KEY = "YOUR_API_KEY"
+$env:DEEPPLANNING_BASE_URL = "https://your-provider.example/v1"
+$env:DEEPPLANNING_MODEL = "YOUR_MODEL_CONFIG_NAME"
 .\.venv\Scripts\python.exe verify_release.py
 ```
 
-Use any OpenAI-compatible model by setting the model and endpoint options used
-by the runner. Never commit a key. The downloader retrieves five pinned
-official archives (about 100 MiB compressed), verifies their sizes and
-SHA-256 values, and installs the complete 120 Shopping and 120+120 Travel
-cohorts. Re-running it skips complete assets.
+`DEEPPLANNING_MODEL` names an entry in `models_config.json`. The same model,
+endpoint, and key are used by proposal agents and selectors. The older
+`DEEPPLANNING_OPENAI_BASE_URL` and provider-specific key named by a model entry
+remain compatibility fallbacks; new runs should use the variables above.
 
-## Methods
+## RISE algorithm
 
-| Method | Definition |
-|---|---|
-| `vanilla` | One independent complete agent rollout |
-| `oagents_best4` | Four independent rollouts followed by public list-wise selection |
-| `statetrace_dsr` | RISE: public recovery frontier, fresh proposals, selection, and event credit |
+`run_deepplanning_eds_eca.py` starts from an independently generated Vanilla
+anchor. For each of three rounds it builds a public structural frontier, runs
+a complete proposal in a fresh environment, checks material disagreement, and
+optionally selects and credits the pair. A malformed selector response retains
+the incumbent. Preserve and avoid IDs are source-checked before projection;
+only event shapes enter the next round. Literal arguments, result bodies, and
+selector rationale are not replayed.
 
-RISE maintains an accepted trajectory, compiles public tool events into a
-frontier, runs a fresh proposal, gates selection on material public
-disagreement, and carries source-constrained preserve/avoid credit to later
-proposals. Evaluator output, hidden requirements, reward, and gold actions are
-not online inputs.
-
-## Vanilla generation
-
-The following commands cover the complete Shopping and Travel cohorts. Change
-the run names only when starting a new model or seed; outputs are resumable.
+Generate the Chinese and English Vanilla Travel anchors:
 
 ```powershell
 $py = ".\.venv\Scripts\python.exe"
-
-& $py run_deepplanning_shopping_subset.py --shopping-root .\shoppingplanning --model deepseek-v4.1-flash --level 1 --case-ids (1..50) --run-name vanilla_L1 --workers 20 --max-llm-calls 400 --trial 1 --orchestration-seed 53403 --allow-inference-failures
-& $py run_deepplanning_shopping_subset.py --shopping-root .\shoppingplanning --model deepseek-v4.1-flash --level 2 --case-ids (1..50) --run-name vanilla_L2 --workers 20 --max-llm-calls 400 --trial 1 --orchestration-seed 53403 --allow-inference-failures
-& $py run_deepplanning_shopping_subset.py --shopping-root .\shoppingplanning --model deepseek-v4.1-flash --level 3 --case-ids (1..20) --run-name vanilla_L3 --workers 10 --max-llm-calls 400 --trial 1 --orchestration-seed 53403 --allow-inference-failures
-& $py run_deepplanning_travel_inference_only.py --travel-root .\travelplanning --model deepseek-v4.1-flash --language zh --workers 20 --max-llm-calls 400 --seed 53403 --output-root .\travel_runs\vanilla
-& $py run_deepplanning_travel_inference_only.py --travel-root .\travelplanning --model deepseek-v4.1-flash --language en --workers 20 --max-llm-calls 400 --seed 53403 --output-root .\travel_runs\vanilla
+& $py run_deepplanning_travel_inference_only.py --travel-root .\travelplanning `
+  --model $env:DEEPPLANNING_MODEL --language zh --workers 20 `
+  --max-llm-calls 400 --seed 53403 --output-root .\travel_runs\vanilla
+& $py run_deepplanning_travel_inference_only.py --travel-root .\travelplanning `
+  --model $env:DEEPPLANNING_MODEL --language en --workers 20 `
+  --max-llm-calls 400 --seed 53403 --output-root .\travel_runs\vanilla
 ```
 
-## RISE and Best-of-4
-
-Run the RISE adapter after its matching Vanilla anchor exists:
+Run RISE on each language. The model slug defaults to a filesystem-safe form
+of `--model`; pass `--anchor-model-slug` only when the anchor directory uses a
+different slug.
 
 ```powershell
-& $py run_deepplanning_eds_eca.py --help
+& $py run_deepplanning_eds_eca.py --root . --output .\results\rise `
+  --cohort travel-zh --model $env:DEEPPLANNING_MODEL --anchor-tag vanilla `
+  --workers 20 --proposal-seed 64639 --selector-seed 77113
+& $py run_deepplanning_eds_eca.py --root . --output .\results\rise `
+  --cohort travel-en --model $env:DEEPPLANNING_MODEL --anchor-tag vanilla `
+  --workers 20 --proposal-seed 64639 --selector-seed 77113
 ```
 
-Use the script's `--anchor-model-slug`, `--deepplanning-adapter`, output-root,
-and cohort options to point at the matching Vanilla artifacts. The exact
-options are intentionally exposed by `--help` because the Travel and Shopping
-cohorts have different artifact layouts. The runner must use a fresh
-environment for every proposal and the same model/seed budget as the paired
-baseline.
+The optional `--deepplanning-adapter` adds schema-derived public plan signals.
+It is an explicit variant and is not silently enabled by the default command.
 
-Generate four independent candidates for the comparison baseline, then run
-the bundled public selector:
+## Best-of-4
+
+Generate four independent complete candidate sets with the same model and
+rollout limits. Each invocation writes to
+`<candidate-root>/<model-config>_<language>/trajectories/`. For example:
 
 ```powershell
-& $py select_best_of_4_deepplanning.py --help
-& $py select_best_of_4_deepplanning.py --root . --cohort travel-zh --workers 20
-& $py select_best_of_4_deepplanning.py --root . --cohort travel-en --workers 20
-& $py select_best_of_4_deepplanning.py --root . --cohort shopping --workers 20
+$candidateSeeds = 53403, 64639, 64640, 64641
+for ($i = 0; $i -lt $candidateSeeds.Count; $i++) {
+  & $py run_deepplanning_travel_inference_only.py --travel-root .\travelplanning `
+    --model $env:DEEPPLANNING_MODEL --language zh --workers 20 `
+    --max-llm-calls 400 --seed $candidateSeeds[$i] --output-root ".\cand_$i"
+  & $py run_deepplanning_travel_inference_only.py --travel-root .\travelplanning `
+    --model $env:DEEPPLANNING_MODEL --language en --workers 20 `
+    --max-llm-calls 400 --seed $candidateSeeds[$i] --output-root ".\cand_$i"
+}
 ```
 
-Best-of-4 receives only public task and trajectory information. It does not
-receive evaluator labels or RISE event credit.
-
-## Official evaluation and metrics
-
-Place official summaries in this layout:
+The resulting layout is:
 
 ```text
-results/<method>/shopping/**/summary_report.json
+cand_0/<model-config>_zh/trajectories/id_0.json ... id_119.json
+cand_0/<model-config>_en/trajectories/id_0.json ... id_119.json
+...
+cand_3/<model-config>_en/trajectories/id_0.json ... id_119.json
+```
+
+Then select one complete trajectory per task using only public trajectory
+information:
+
+```powershell
+& $py select_best_of_4_deepplanning.py --root . --output-root .\results\best_of_n `
+  --candidate-root .\cand_0 --candidate-root .\cand_1 `
+  --candidate-root .\cand_2 --candidate-root .\cand_3 `
+  --cohort travel-zh --model $env:DEEPPLANNING_MODEL --workers 20
+```
+
+Repeat with `--cohort travel-en`. The selector requires exactly four candidate
+roots and resolves `<model-config>` from `--model`; it does not assume a
+provider-specific directory name.
+
+## Official evaluation and table export
+
+Run conversion and the official evaluator for every method and language using
+the included scripts. Place the resulting summaries at:
+
+```text
 results/<method>/travel_zh/evaluation_summary.json
 results/<method>/travel_en/evaluation_summary.json
 ```
 
-Use method directories `vanilla`, `oagents_best4`, and `statetrace_dsr`, then
-run:
+Use method directory names `vanilla`, `best_of_n`, and `rise`, then export the
+paper-shaped table:
 
 ```powershell
 & $py report_metrics.py --results .\results --output .\results\metrics.json `
-  --csv .\results\metrics.csv --plot .\results\deepplanning_metrics.png
+  --csv .\results\metrics.csv
 ```
 
-The report contains Travel Delivery, Commonsense, Personalized, Composite,
-and case accuracy, plus Shopping match and case accuracy. It fails when a
-method or cohort is missing, so incomplete runs cannot be reported as a full
-comparison.
+The reporter emits Delivery, Commonsense, Personalized, and Composite for
+Chinese and English separately. It checks the explicit IDs of the complete
+120-task cohort, delivered-plan IDs, evaluation-result IDs, counters, and the
+Delivery denominator before writing output. Generated reports are run outputs
+and should not be committed.
 
-## Privacy and reproducibility
+## Information boundary
 
-Keep outputs, logs, credentials, and local environment files outside a public
-commit. Record the model ID, endpoint family, seed, candidate count, selector
-seed, worker count, and valid-label counts. API failures are transport
-failures, not task failures. This release has a fresh anonymous Git history;
-the publisher account of any public GitHub URL remains visible at the hosting
-level.
+Online proposal and selection use the task, public tool calls/results, final
+answer, and structural event credit. Evaluator scores, hidden constraints,
+gold plans, rewards, and retrospective FRD labels are scoring-only data.

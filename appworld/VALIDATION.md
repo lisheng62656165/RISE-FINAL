@@ -1,54 +1,43 @@
-# Validation record
+# AppWorld Validation Procedure
 
-Date: 2026-09-21. Platform: Linux x86_64, Python 3.12.
+This file defines release checks. It does not record benchmark scores or a
+historical execution result.
 
-## Executed successfully
+## Offline tests
 
-- Copied the release artifact to a standalone directory outside the research
-  repository. Created a new venv; no research packages were imported from the
-  old venv (only its Python interpreter was used to create a new environment).
-- Installed APPWorld 0.1.3.post1 from the pinned wheel and all dependencies.
-- The original release was also tested from its former offline wheel cache.
-  The lightweight release replaces that cache with pinned package-index
-  installation; this historical offline validation is not a claim that the
-  current Git checkout contains dependency wheels.
-- Unpacked the official encrypted data bundle: Test-N 168 task IDs and Test-C
-  417 task IDs. The lightweight release downloads and verifies this bundle
-  before unpacking it.
-- Ran a real AppWorld public API operation and `world.evaluate()` on one task
-  from each split. Both environment/evaluator smoke tests passed.
-- `python -m pytest -q`: **18 passed**. Covers event compiler, hierarchy,
-  documentation/error distinction, event credit projection,
-  selector evidence ownership, no hidden evaluation in selector inputs,
-  binary Faithful selection, OpenAI reasoning request normalization, exact OAgents
-  upstream prompt equality, shared Vanilla identity and incomplete SGC groups.
-- Ran `tests/integration_smoke.py`: two methods, both splits, one task per
-  split, real AppWorld/evaluator, fake local API responses, max_steps=1.
-  Verified four candidate artifacts, final selectors, exact shared Vanilla A,
-  four-column summary, then repeated the same run to verify resume.
+```bash
+python -m pytest -q
+python tests/integration_smoke.py
+```
 
-## Not claimed
+The tests cover public-event compilation, source ownership of selector credit,
+structural projection without literal replay, evaluator-field exclusion,
+shared Vanilla candidate identity, official OAgents prompt loading, incomplete
+scenario handling, resume behavior, and malformed-selector fallback.
 
-- Fake API integration results are NOT model performance measurements.
-- No paid OpenAI/ChatGPT-model full run was launched for this packaging task.
-- No new 585-task performance replication was performed. Historical Nemotron
-  results are not asserted as the output of this release or of another model.
-- Native Windows/macOS and other Python/CPU platforms were not validated.
-- Provider availability, quota, long-context support and deterministic seed
-  behavior are not guaranteed. Run a paid one-task smoke with your chosen model.
-- Passing small execution tests does not guarantee all model-generated programs
-  finish without error. The driver preserves failed-task diagnostics and resumes.
+## Algorithm invariants
 
-## Known protocol details retained
+- Each anchor and proposal executes in a separate fresh `AppWorld` context.
+- Selection is skipped when ordered public API signatures do not materially
+  disagree.
+- Candidate display order may be randomized, but malformed or invalid selector
+  output always retains the semantic incumbent.
+- Preserve credit is sourced from the selected candidate; avoid credit is
+  sourced from the rejected candidate; both are projected to structural event
+  shapes before reuse.
+- Evaluator success, hidden requirements, rewards, and gold state do not enter
+  proposal or selector payloads.
+- RISE and Best-of-4 share candidate A in paired comparison mode.
 
-- StateTrace's disagreement detector compares public structural signatures;
-  it does not evaluate hidden goal satisfaction.
-- On malformed Faithful evidence, fallback selects displayed A, which is not always
-  the incumbent because display order alternates. This is retained from the
-  source method, not silently changed in the release.
-- Four independent OAgents candidates use the research ReAct runner, not the
-  entire upstream planning framework; this is why the comparison has a dagger.
-- Parallelism is across tasks. OAgents' four within-task independent candidates
-  are scheduled sequentially; do not claim upstream parallel wall-clock cost.
-- Shared A is reused in the two-method comparison. Neither method sees evaluator
-  success when proposing or selecting a trajectory.
+## Live smoke test
+
+After installing AppWorld assets, run one task from each official split with
+the intended model endpoint before launching the full batch. Confirm that the
+environment executes a public API call, evaluation runs only after trajectory
+completion, checkpoints resume, and missing API responses remain incomplete
+rather than being converted to task failures.
+
+The Best-of-4 adapter vendors the official ORM list-wise prompt but uses this
+release's AppWorld ReAct runner. Report it as an adaptation, not as the entire
+upstream OAgents runtime. Parallelism is across tasks; do not infer within-task
+parallel wall-clock behavior from the method name.

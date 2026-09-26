@@ -5,7 +5,6 @@ import copy
 import json
 import os
 import random
-import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -46,12 +45,10 @@ def load_candidate_functions(root: Path):
     return message_rows, public_candidate
 
 
-def query_for(root: Path, level: int, case_id: int) -> str:
-    rows = load_json(root / "shoppingplanning" / f"data/level_{level}_query_meta.json")
-    return next(str(row["query"]) for row in rows if int(row["id"]) == case_id)
-
-
-def select_one(client: OpenAI, candidates: list[dict[str, Any]], ordinal: int, seed: int) -> dict[str, Any]:
+def select_one(
+    client: OpenAI, candidates: list[dict[str, Any]], ordinal: int, seed: int,
+    model: str, max_tokens: int,
+) -> dict[str, Any]:
     order = list(range(4))
     random.Random(seed + ordinal).shuffle(order)
     shown = []
@@ -70,12 +67,13 @@ def select_one(client: OpenAI, candidates: list[dict[str, Any]], ordinal: int, s
         "Do not use candidate order, trajectory length, evaluator output, hidden labels, or gold state."
     )
     response = client.chat.completions.create(
-        model=os.environ.get("DEEPPLANNING_API_MODEL", "deepseek-v4.1-flash"),
+        model=model,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": canonical({"candidates": shown})}],
         tools=[SELECT_TOOL],
         tool_choice={"type": "function", "function": {"name": "select_trajectory"}},
         temperature=0,
-        max_tokens=4096,
+        max_tokens=max_tokens,
+        seed=seed + ordinal,
         timeout=300,
     )
     calls = response.choices[0].message.tool_calls or []
@@ -96,40 +94,27 @@ def select_one(client: OpenAI, candidates: list[dict[str, Any]], ordinal: int, s
     }
 
 
-def run_shopping(args: argparse.Namespace, level: int, case_id: int, ordinal: int, client: OpenAI) -> dict[str, Any]:
-    root = args.root
-    shop = root / "shoppingplanning"
-    message_rows, public_candidate = load_candidate_functions(root)
-    sources = [shop / "database_infered" / f"database_deepseek_best4_c{i}_L{level}" / f"case_{case_id}" for i in range(4)]
-    candidates = []
-    for i, source in enumerate(sources):
-        payload = load_json(source / "messages.json")
-        candidates.append(public_candidate(query_for(root, level, case_id), message_rows(payload), f"C{i}-E"))
-    decision = select_one(client, candidates, ordinal, args.selector_seed)
-    selected_source = sources[int(decision["selected"])]
-    target = shop / "database_infered" / f"database_deepseek_best4_selected_L{level}" / f"case_{case_id}"
-    if not target.exists():
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(selected_source, target)
-    return {"task": f"shopping::L{level}::{case_id}", **decision}
-
-
 def run_travel(args: argparse.Namespace, language: str, task_id: int, ordinal: int, client: OpenAI) -> dict[str, Any]:
     root = args.root
     message_rows, public_candidate = load_candidate_functions(root)
-    model = "deepseek-v4.1-flash"
-    sources = [root / "results" / "deepseek_dp_compare" / "best4" / f"c{i}" / "travel_runs" / f"deepseek-v4.1-flash_{language}" / "trajectories" / f"id_{task_id}.json" for i in range(4)]
+    sources = [
+        root / f"{args.model}_{language}" / "trajectories" / f"id_{task_id}.json"
+        for root in args.candidate_root
+    ]
     candidates = []
     for i, source in enumerate(sources):
         payload = load_json(source)
         candidates.append(public_candidate(str(payload["query"]), message_rows(payload.get("messages", [])), f"C{i}-E"))
-    decision = select_one(client, candidates, ordinal, args.selector_seed)
+    decision = select_one(
+        client, candidates, ordinal, args.selector_seed, args.api_model,
+        args.selector_max_tokens,
+    )
     selected_source = sources[int(decision["selected"])]
-    target_root = root / "results" / "deepseek_dp_compare" / "best4_selected" / "travel_runs"
-    target = target_root / f"deepseek-v4.1-flash_{language}" / "trajectories" / f"id_{task_id}.json"
+    target_root = args.output_root / f"travel_{language}"
+    target = target_root / "trajectories" / f"id_{task_id}.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     if not target.exists():
-        shutil.copy2(selected_source, target)
+        target.write_bytes(selected_source.read_bytes())
     reports = target.parent.parent / "reports"
     reports.mkdir(parents=True, exist_ok=True)
     selected_payload = load_json(selected_source)
@@ -140,27 +125,38 @@ def run_travel(args: argparse.Namespace, language: str, task_id: int, ordinal: i
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument("--cohort", choices=("shopping", "travel-zh", "travel-en"), required=True)
+    parser.add_argument("--candidate-root", type=Path, action="append", required=True,
+                        help="Candidate artifact root; pass exactly four times.")
+    parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--cohort", choices=("travel-zh", "travel-en"), required=True)
+    parser.add_argument("--model", default=os.environ.get("DEEPPLANNING_MODEL"))
     parser.add_argument("--workers", type=int, default=20)
     parser.add_argument("--selector-seed", type=int, default=77113)
+    parser.add_argument("--selector-max-tokens", type=int, default=4096)
     args = parser.parse_args()
-    key = os.environ.get("DEEPSEEK_API_KEY")
-    if not key:
-        raise ValueError("DEEPSEEK_API_KEY is required")
+    if len(args.candidate_root) != 4:
+        raise ValueError("--candidate-root must be passed exactly four times")
+    if not args.model:
+        raise ValueError("--model or DEEPPLANNING_MODEL is required")
+    models = load_json(args.root / "models_config.json").get("models", {})
+    model_config = models.get(args.model)
+    if not isinstance(model_config, dict):
+        raise ValueError(f"Missing model config: {args.model}")
+    args.api_model = str(model_config.get("model_name") or args.model)
+    key = os.environ.get("DEEPPLANNING_API_KEY")
+    base_url = os.environ.get("DEEPPLANNING_BASE_URL") or os.environ.get("DEEPPLANNING_OPENAI_BASE_URL")
+    if not key or not base_url:
+        raise ValueError("DEEPPLANNING_API_KEY and DEEPPLANNING_BASE_URL are required")
     client = OpenAI(
         api_key=key,
-        base_url=os.environ.get("DEEPPLANNING_BASE_URL", "https://api.deepseek.com/v1"),
+        base_url=base_url,
         timeout=300,
         max_retries=2,
     )
-    if args.cohort == "shopping":
-        jobs = [(level, case_id) for level, count in ((1, 50), (2, 50), (3, 20)) for case_id in range(1, count + 1)]
-        runner = lambda job, ordinal: run_shopping(args, job[0], job[1], ordinal, client)
-    else:
-        language = args.cohort.rsplit("-", 1)[1]
-        jobs = [(language, task_id) for task_id in range(120)]
-        runner = lambda job, ordinal: run_travel(args, job[0], job[1], ordinal, client)
-    output = args.root / "results" / "deepseek_dp_compare" / "best4_selected" / f"selection_{args.cohort.replace('-', '_')}"
+    language = args.cohort.rsplit("-", 1)[1]
+    jobs = [(language, task_id) for task_id in range(120)]
+    runner = lambda job, ordinal: run_travel(args, job[0], job[1], ordinal, client)
+    output = args.output_root / f"selection_{args.cohort.replace('-', '_')}"
     output.mkdir(parents=True, exist_ok=True)
     rows = []
     with ThreadPoolExecutor(max_workers=args.workers) as pool:

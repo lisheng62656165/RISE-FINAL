@@ -140,18 +140,6 @@ scenario must pass. The summarizer uses only matched completed task artifacts;
 missing evaluations never become successes and incomplete scenario groups are
 not counted as SGC successes.
 
-## Paper reference: historical Test-C configuration
-
-This is the recorded full-coverage reference table for the shared basic
-configuration. It is included for comparison and is not silently recomputed
-when a new API run starts.
-
-| Method | TGC | SGC |
-|---|---:|---:|
-| Vanilla | 366/417 = 87.8% | 105/139 = 75.5% |
-| OAgents Best-of-4 | 367/417 = 88.0% | 108/139 = 77.7% |
-| Faithful v3 | 374/417 = 89.7% | 114/139 = 82.0% |
-
 ## Reproducibility and privacy rules
 
 - Keep API keys in environment variables or outside the repository.

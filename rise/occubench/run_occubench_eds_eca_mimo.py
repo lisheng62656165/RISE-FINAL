@@ -200,7 +200,10 @@ def select_with_statebench_eds_eca(
     )
     key = os.environ.get(ns.selector_api_key_env, "")
     if not key:
-        raise RuntimeError(f"missing_selector_key:{ns.selector_api_key_env}")
+        return 0, {
+            "fallback": True,
+            "fallback_reason": f"missing_selector_key:{ns.selector_api_key_env}",
+        }, public_candidates
     client = base.make_client(
         key,
         ns.selector_base_url or ns.agent_base_url,
@@ -266,7 +269,12 @@ def select_with_statebench_eds_eca(
                     "Allowed event IDs by displayed candidate index: "
                     + json.dumps({str(k): sorted(v) for k, v in allowed.items()})
                 )})
-            raise RuntimeError("selector_validation_exhausted: " + json.dumps(attempts))
+            return 0, {
+                "fallback": True,
+                "fallback_reason": "selector_validation_exhausted",
+                "validation_attempts": attempts,
+                "selector_design": selector_design,
+            }, public_candidates
         finally:
             if semaphore is not None:
                 semaphore.release()

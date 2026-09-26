@@ -31,6 +31,5 @@
     "Test-N SGC",
     "Test-C TGC",
     "Test-C SGC"
-  ],
-  "result_policy": "The supplied Test-C table is the reference result for this shared protocol; Test-N is evaluated by the same configuration and is not inferred from Test-C."
+  ]
 }

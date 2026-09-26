@@ -112,7 +112,7 @@ def write_overall_results(scores_dir: Path, task_count: int, verifier_model: str
 
 def parse_args(argv=None):
     config_parser = argparse.ArgumentParser(add_help=False)
-    config_parser.add_argument("--config", type=Path, default=ROOT / "configs" / "main_results.json")
+    config_parser.add_argument("--config", type=Path, default=ROOT / "configs" / "default_experiment.json")
     config_args, _ = config_parser.parse_known_args(argv)
     defaults = json.loads(config_args.config.read_text(encoding="utf-8"))
     parser = argparse.ArgumentParser()
@@ -131,7 +131,7 @@ def parse_args(argv=None):
     parser.add_argument("--max-steps", type=int, default=200)
     parser.add_argument("--max-tokens", type=int, default=16384)
     parser.add_argument("--limit", type=int, default=382)
-    parser.add_argument("--output", type=Path, default=ROOT / "results" / "main_selector53403")
+    parser.add_argument("--output", type=Path, default=ROOT / "results" / "run")
     allowed = {action.dest for action in parser._actions} - {"help", "config", "base_url", "api_key_env", "output"}
     if set(defaults) - allowed:
         parser.error("Config contains unsupported options: " + ", ".join(sorted(set(defaults) - allowed)))
