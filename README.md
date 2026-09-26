@@ -179,6 +179,8 @@ See [`PAPER_ALIGNMENT.md`](PAPER_ALIGNMENT.md) for the paper-to-code map,
 historical naming policy, data boundaries, and result tables.
 See [`CODE_REVIEW.md`](CODE_REVIEW.md) for the reviewer-oriented implementation
 audit, residual reproduction caveats, and the release verification record.
+See [`SOURCES.md`](SOURCES.md) for upstream revisions, asset origins, licenses,
+and adaptation boundaries.
 
 ## Double-blind supplementary
 
@@ -195,3 +197,5 @@ The archive retains source, tests, configs, manifests, downloaders, README
 files, and reproducibility instructions. Upload that archive directly to the
 submission system or place the same clean export on an anonymous code host.
 See [`SUPPLEMENTARY.md`](SUPPLEMENTARY.md) for the release checklist.
+The repeatable grep-style identity and credential scan is documented in
+[`ANONYMITY_AUDIT.md`](ANONYMITY_AUDIT.md).

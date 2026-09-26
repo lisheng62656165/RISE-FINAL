@@ -27,6 +27,10 @@ Before submission:
 5. Upload the zip to the supplementary-material field, or upload the extracted
    clean tree to an anonymous code-hosting service.
 
+Run `python tools/audit_anonymity.py --archive <archive.zip>` before upload.
+The expected result is no configured identity, home-path, or credential
+patterns; email-shaped benchmark fixtures are reported separately.
+
 Large assets are obtained after extraction from official sources:
 
 - DeepPlanning databases: `python deepplanning/download_assets.py`
