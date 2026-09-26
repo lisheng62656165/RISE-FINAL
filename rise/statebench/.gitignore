@@ -1,0 +1,16 @@
+outputs/
+scores/
+*.log
+*.tmp
+__pycache__/
+*.py[cod]
+.venv/
+.release-venv/
+.pytest_cache/
+reports/
+.env
+api_key*.txt
+key*.txt
+api_*.txt
+.env.*
+!.env.example
